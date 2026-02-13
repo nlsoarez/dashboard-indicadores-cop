@@ -1,9 +1,6 @@
-from __future__ import annotations
+import pandas as pd
 
-# ---------------------------
-# Base fixa: equipe e metas
-# ---------------------------
-
+# --------- SUA EQUIPE (fixa) ----------
 EQUIPE = [
     ("N6088107","LEANDRO GONÇALVES DE CARVALHO","EMPRESARIAL"),
     ("N5619600","BRUNO COSTA BUCARD","EMPRESARIAL"),
@@ -28,23 +25,23 @@ EQUIPE = [
     ("F106664","RAISSA LIMA DE OLIVEIRA","RESIDENCIAL"),
 ]
 
-# Metas (em %)
+BASE_EQUIPE = pd.DataFrame(EQUIPE, columns=["Matricula","Nome","Setor"])
+EQUIPE_IDS = set(BASE_EQUIPE["Matricula"].tolist())
+
+
+# --------- METAS ----------
 METAS = {
-    "DPA - Ocupação": {"meta": 90, "direcao": "up"},
     "Chat TOA": {"meta": 75, "direcao": "up"},
-    "ETIT por Evento RAL": {"meta": 90, "direcao": "up"},
-    "ETIT por Evento REC": {"meta": 90, "direcao": "up"},
     "ETIT Outage Sem Sinal (GPON)": {"meta": 90, "direcao": "up"},
-    "Log Outage Reprog. GPON": {"meta": 10, "direcao": "down"},
+    "Log Outage Reprog. GPON": {"meta": 10, "direcao": "down"},  # menor é melhor
 }
 
-# Como identificar os 3 indicadores dentro das duas planilhas
-# Obs.: Chat TOA às vezes vem com nomes diferentes. Coloquei padrões (contains) para funcionar mesmo mudando texto.
+# Padrões para achar o indicador do Chat na planilha TOA:
 CHAT_TOA_NAME_PATTERNS = [
-    "CHAT", "INTERAÇÃO", "INTERACAO", "10 MIN", "10MIN", "TOA CHAT"
+    "CHAT",
+    "INTERAÇÃO",
+    "INTERACAO",
+    "10 MIN",
+    "10MIN",
+    "TOA",
 ]
-
-# Na planilha Residencial (aba Analitico)
-RES_ETIT_GPON_INDICADOR_NOME = "ETIT GPON"
-RES_LOG_REPROG_GPON_INDICADOR_NOME = "LOG REPROGRAMAÇÃO GPON"
-RES_SINTOMA_SEM_SINAL = "INTERRUPCAO"  # costuma ser o equivalente ao "Sem Sinal"
