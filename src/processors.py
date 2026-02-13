@@ -7,6 +7,15 @@ from src.config import (
     COL_LOGIN, COL_NOME, COL_BASE, COL_DATA, COL_MES, COL_ANOMES,
     COL_VOL_TOTAL, COL_VOL_MEDIA, COL_DPA_USO, COL_DPA_JORNADA,
     COL_DPA_RESULTADO, VOL_COLS, COL_CARGO, COL_PERIODO, COL_COORD,
+    # ETIT
+    ETIT_INDICADOR_FILTRO, ETIT_COL_INDICADOR, ETIT_COL_LOGIN,
+    ETIT_COL_DEMANDA, ETIT_COL_VOLUME, ETIT_COL_STATUS,
+    ETIT_COL_TIPO, ETIT_COL_AREA, ETIT_COL_CAUSA,
+    ETIT_COL_REGIONAL, ETIT_COL_GRUPO, ETIT_COL_CIDADE, ETIT_COL_UF,
+    ETIT_COL_TOA, ETIT_COL_DT_INICIO, ETIT_COL_DT_FIM,
+    ETIT_COL_DT_ACIONAMENTO, ETIT_COL_TURNO,
+    ETIT_COL_TMA, ETIT_COL_TMR, ETIT_COL_ANOMES,
+    ETIT_SHEET_CANDIDATES, ETIT_COL_INDICADOR_VAL,
 )
 
 
@@ -57,6 +66,152 @@ def load_produtividade(uploaded_file) -> pd.DataFrame:
     return df_equipe
 
 
+# =====================================================
+# ETIT POR EVENTO — Loader e processadores
+# =====================================================
+def load_etit(uploaded_file) -> pd.DataFrame:
+    """Lê a planilha Analítico Empresarial e retorna apenas ETIT POR EVENTO da equipe."""
+    sheets = list_sheets(uploaded_file)
+    if hasattr(uploaded_file, 'seek'):
+        uploaded_file.seek(0)
+
+    sheet_to_read = None
+    for candidate in ETIT_SHEET_CANDIDATES:
+        if candidate in sheets:
+            sheet_to_read = candidate
+            break
+    if sheet_to_read is None:
+        sheet_to_read = sheets[0]
+
+    df = pd.read_excel(uploaded_file, sheet_name=sheet_to_read)
+
+    # Filtra apenas ETIT POR EVENTO
+    if ETIT_COL_INDICADOR in df.columns:
+        df = df[df[ETIT_COL_INDICADOR] == ETIT_INDICADOR_FILTRO].copy()
+    else:
+        return pd.DataFrame()
+
+    if df.empty:
+        return df
+
+    # Filtra equipe
+    df[ETIT_COL_LOGIN] = df[ETIT_COL_LOGIN].astype(str).str.strip()
+    df_equipe = df[df[ETIT_COL_LOGIN].isin(EQUIPE_IDS)].copy()
+
+    # Merge com info da equipe (nome e setor)
+    df_equipe = df_equipe.merge(
+        BASE_EQUIPE[["Matricula", "Nome", "Setor"]],
+        left_on=ETIT_COL_LOGIN, right_on="Matricula", how="left"
+    )
+
+    # Garante tipos
+    for c in [ETIT_COL_TMA, ETIT_COL_TMR, ETIT_COL_VOLUME, ETIT_COL_INDICADOR_VAL]:
+        if c in df_equipe.columns:
+            df_equipe[c] = pd.to_numeric(df_equipe[c], errors="coerce")
+
+    for c in [ETIT_COL_DT_INICIO, ETIT_COL_DT_FIM, ETIT_COL_DT_ACIONAMENTO]:
+        if c in df_equipe.columns:
+            df_equipe[c] = pd.to_datetime(df_equipe[c], errors="coerce")
+
+    if ETIT_COL_ANOMES in df_equipe.columns:
+        df_equipe[ETIT_COL_ANOMES] = df_equipe[ETIT_COL_ANOMES].astype(str).str.strip()
+
+    return df_equipe
+
+
+def etit_resumo_analista(df: pd.DataFrame) -> pd.DataFrame:
+    """Resumo ETIT por analista: total eventos, aderência, TMA/TMR médios, por demanda."""
+    if df.empty:
+        return pd.DataFrame()
+
+    group = df.groupby([ETIT_COL_LOGIN, "Nome", "Setor"]).agg(
+        Total_Eventos=(ETIT_COL_VOLUME, "sum"),
+        Eventos_Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+        TMA_Medio=(ETIT_COL_TMA, "mean"),
+        TMR_Medio=(ETIT_COL_TMR, "mean"),
+        RAL_Count=(ETIT_COL_DEMANDA, lambda x: (x == "RAL").sum()),
+        REC_Count=(ETIT_COL_DEMANDA, lambda x: (x == "REC").sum()),
+    ).reset_index()
+
+    group["Aderencia_Pct"] = (group["Eventos_Aderentes"] / group["Total_Eventos"] * 100).round(1)
+    group["TMA_Medio"] = group["TMA_Medio"].round(4)
+    group["TMR_Medio"] = group["TMR_Medio"].round(4)
+    group = group.sort_values("Total_Eventos", ascending=False).reset_index(drop=True)
+
+    return group
+
+
+def etit_por_demanda(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown por tipo de demanda (RAL/REC)."""
+    if df.empty:
+        return pd.DataFrame()
+    return df.groupby(ETIT_COL_DEMANDA).agg(
+        Eventos=(ETIT_COL_VOLUME, "sum"),
+        Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+        TMA_Medio=(ETIT_COL_TMA, "mean"),
+        TMR_Medio=(ETIT_COL_TMR, "mean"),
+    ).reset_index().rename(columns={ETIT_COL_DEMANDA: "Demanda"})
+
+
+def etit_por_tipo(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown por tipo de rede/equipamento."""
+    if df.empty:
+        return pd.DataFrame()
+    return df.groupby(ETIT_COL_TIPO).agg(
+        Eventos=(ETIT_COL_VOLUME, "sum"),
+        Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+    ).reset_index().rename(columns={ETIT_COL_TIPO: "Tipo"}).sort_values("Eventos", ascending=False)
+
+
+def etit_por_causa(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown por causa."""
+    if df.empty:
+        return pd.DataFrame()
+    return df.groupby(ETIT_COL_CAUSA).agg(
+        Eventos=(ETIT_COL_VOLUME, "sum"),
+        Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+    ).reset_index().rename(columns={ETIT_COL_CAUSA: "Causa"}).sort_values("Eventos", ascending=False)
+
+
+def etit_por_regional(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown por regional."""
+    if df.empty:
+        return pd.DataFrame()
+    return df.groupby(ETIT_COL_REGIONAL).agg(
+        Eventos=(ETIT_COL_VOLUME, "sum"),
+        Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+    ).reset_index().rename(columns={ETIT_COL_REGIONAL: "Regional"}).sort_values("Eventos", ascending=False)
+
+
+def etit_por_turno(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown por turno."""
+    if df.empty:
+        return pd.DataFrame()
+    return df.groupby(ETIT_COL_TURNO).agg(
+        Eventos=(ETIT_COL_VOLUME, "sum"),
+        Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+    ).reset_index().rename(columns={ETIT_COL_TURNO: "Turno"}).sort_values("Eventos", ascending=False)
+
+
+def etit_evolucao_diaria(df: pd.DataFrame) -> pd.DataFrame:
+    """Evolução diária de eventos ETIT."""
+    if df.empty or ETIT_COL_DT_ACIONAMENTO not in df.columns:
+        return pd.DataFrame()
+    df_c = df.copy()
+    df_c["Data"] = df_c[ETIT_COL_DT_ACIONAMENTO].dt.date
+    daily = df_c.groupby("Data").agg(
+        Eventos=(ETIT_COL_VOLUME, "sum"),
+        Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+        Analistas=(ETIT_COL_LOGIN, "nunique"),
+    ).reset_index()
+    daily["Data"] = pd.to_datetime(daily["Data"])
+    daily["Aderencia_Pct"] = (daily["Aderentes"] / daily["Eventos"] * 100).round(1)
+    return daily
+
+
+# =====================================================
+# Funções originais (sem alteração)
+# =====================================================
 def resumo_mensal(df: pd.DataFrame) -> pd.DataFrame:
     """Gera resumo mensal por analista."""
     agg_dict = {
@@ -64,22 +219,18 @@ def resumo_mensal(df: pd.DataFrame) -> pd.DataFrame:
         COL_VOL_TOTAL: "sum",
     }
 
-    # Adiciona volumes individuais
     for vc in VOL_COLS.keys():
         if vc in df.columns:
             agg_dict[vc] = "sum"
 
-    # DPA: média (filtrando outliers)
     group_cols = [COL_LOGIN, COL_NOME, "Setor", COL_MES, COL_ANOMES]
     existing_group = [c for c in group_cols if c in df.columns]
 
     g = df.groupby(existing_group).agg(agg_dict).reset_index()
     g = g.rename(columns={COL_DATA: "Dias_Trabalhados"})
 
-    # Média diária
     g["Media_Diaria"] = (g[COL_VOL_TOTAL] / g["Dias_Trabalhados"]).round(1)
 
-    # DPA média por analista/mês (calculada separadamente para filtrar outliers)
     dpa_valid = df[(df[COL_DPA_RESULTADO] >= 0) & (df[COL_DPA_RESULTADO] <= 120)].copy()
     if not dpa_valid.empty:
         dpa_mean = dpa_valid.groupby(existing_group)[COL_DPA_RESULTADO].mean().reset_index()
@@ -109,7 +260,6 @@ def resumo_geral(df: pd.DataFrame) -> pd.DataFrame:
     g = g.rename(columns={COL_DATA: "Dias_Trabalhados"})
     g["Media_Diaria"] = (g[COL_VOL_TOTAL] / g["Dias_Trabalhados"]).round(1)
 
-    # DPA
     dpa_valid = df[(df[COL_DPA_RESULTADO] >= 0) & (df[COL_DPA_RESULTADO] <= 120)].copy()
     if not dpa_valid.empty:
         dpa_mean = dpa_valid.groupby(existing_group)[COL_DPA_RESULTADO].mean().reset_index()
