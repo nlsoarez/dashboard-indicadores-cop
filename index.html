@@ -367,7 +367,33 @@ function findValueColumn(headers, sheetData, extraKeywords) {
 function extractIndicatorData(sheetData, indicatorKeywords) {
   if (!sheetData || !sheetData.length) return {consolidated: null, byAnalyst: {}};
   
-  var headers = Object.keys(sheetData[0]);
+  // IMPORTANTE: A aba pode ter linhas vazias no início, precisa encontrar o cabeçalho real
+  var startRow = 0;
+  for (var si = 0; si < sheetData.length; si++) {
+    var row = sheetData[si];
+    var hasData = false;
+    for (var key in row) {
+      var val = row[key];
+      if (val !== null && val !== undefined && String(val).trim().length > 0) {
+        hasData = true;
+        break;
+      }
+    }
+    if (hasData) {
+      startRow = si;
+      break;
+    }
+  }
+  
+  console.log("Primeira linha com dados:", startRow, sheetData[startRow]);
+  
+  var actualData = sheetData.slice(startRow === 0 ? 0 : startRow + 1);
+  if (actualData.length === 0) {
+    console.log("Nenhum dado encontrado após skip de linhas vazias");
+    return {consolidated: null, byAnalyst: {}};
+  }
+  
+  var headers = Object.keys(actualData[0]);
   console.log("extractIndicatorData - Total headers:", headers.length);
   console.log("Todos os headers:", headers);
   
@@ -375,14 +401,14 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
   for (var logH = 0; logH < headers.length; logH++) {
     var h = headers[logH];
     var sample = [];
-    for (var logR = 0; logR < Math.min(3, sheetData.length); logR++) {
-      sample.push(sheetData[logR][h]);
+    for (var logR = 0; logR < Math.min(3, actualData.length); logR++) {
+      sample.push(actualData[logR][h]);
     }
     console.log("  Col", logH, "(" + h + "):", sample);
   }
   
   // Primeiro, acha coluna de VALOR (percentuais 0-100)
-  var valueCol = findValueColumn(headers, sheetData, indicatorKeywords);
+  var valueCol = findValueColumn(headers, actualData, indicatorKeywords);
   console.log("ValueCol encontrada:", valueCol);
   
   // Depois, acha coluna de LOGIN (que não seja valueCol e tenha texto)
@@ -398,8 +424,8 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
       // Verifica se essa coluna tem texto (possíveis nomes/logins)
       var hasText = false;
       var hasNumbers = true;
-      for (var j = 0; j < Math.min(sheetData.length, 5); j++) {
-        var val = sheetData[j][h];
+      for (var j = 0; j < Math.min(actualData.length, 5); j++) {
+        var val = actualData[j][h];
         if (!val || String(val).trim().length === 0) continue;
         
         var isNum = !isNaN(parseFloat(val));
@@ -429,10 +455,10 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
   var allValues = [];
   var analystValues = [];
   
-  if (sheetData.length && valueCol) {
-    console.log("Processando", sheetData.length, "linhas com ValueCol:", valueCol, "LoginCol:", loginCol);
+  if (actualData.length && valueCol) {
+    console.log("Processando", actualData.length, "linhas com ValueCol:", valueCol, "LoginCol:", loginCol);
     
-    sheetData.forEach(function(row, rowIndex) {
+    actualData.forEach(function(row, rowIndex) {
       var rawVal = row[valueCol];
       var val = parseFloat(rawVal);
       
