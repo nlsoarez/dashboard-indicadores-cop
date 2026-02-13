@@ -258,6 +258,14 @@ function handleFile(input, key) {
       });
       parsedData[key] = {sheets: allSheets, mainData: jsonData, sheetNames: workbook.SheetNames, fileName: file.name};
       uploadedFiles[key] = true;
+      
+      // Log for debugging
+      console.log("Arquivo carregado:", key);
+      console.log("Nome:", file.name);
+      console.log("Abas:", workbook.SheetNames);
+      console.log("Colunas:", Object.keys(jsonData[0] || {}));
+      console.log("Primeiras linhas:", jsonData.slice(0, 3));
+      
       document.getElementById("status-" + key).textContent = "✔ Carregado (" + jsonData.length + " linhas)";
       document.getElementById("status-" + key).className = "status ok";
       document.getElementById("fname-" + key).textContent = file.name;
@@ -321,10 +329,29 @@ function findNameColumn(headers) {
   return findColumnByKeywords(headers, ["NOME","ANALISTA","COLABORADOR","FUNCIONARIO","FUNCIONÁRIO","AGENT NAME","TECH NAME"]);
 }
 
-function findValueColumn(headers, extraKeywords) {
-  var kw = ["PERCENTUAL","%","VALOR","RESULTADO","TAXA","RATE","INDICADOR","ATINGIMENTO","PERFORMANCE"];
+function findValueColumn(headers, sheetData, extraKeywords) {
+  var kw = ["PERCENTUAL","%","VALOR","RESULTADO","TAXA","RATE","INDICADOR","ATINGIMENTO","PERFORMANCE","OCUPAÇÃO","OCUPACAO"];
   if (extraKeywords) kw = extraKeywords.concat(kw);
-  return findColumnByKeywords(headers, kw);
+  var col = findColumnByKeywords(headers, kw);
+  console.log("findValueColumn - keywords:", kw, "found:", col);
+  if (col) return col;
+  
+  // Se não encontrou, tenta procurar por qualquer coluna com números entre 0-100
+  console.log("Procurando por colunas numéricas em", headers.length, "colunas");
+  for (var i = 0; i < headers.length; i++) {
+    if (headers[i].toUpperCase().indexOf("TEXTO") !== -1 || headers[i].toUpperCase().indexOf("OBS") !== -1) continue;
+    var vals = [];
+    for (var j = 0; j < Math.min(sheetData.length, 10); j++) {
+      var num = parseFloat(sheetData[j][headers[i]]);
+      if (!isNaN(num) && num > 0 && num <= 100) vals.push(num);
+    }
+    if (vals.length > 3) {
+      console.log("Encontrada coluna numérica:", headers[i], "com", vals.length, "valores");
+      return headers[i];
+    }
+  }
+  console.log("Nenhuma coluna numérica encontrada");
+  return null;
 }
 
 function extractIndicatorData(sheetData, indicatorKeywords) {
@@ -332,43 +359,33 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
   var headers = Object.keys(sheetData[0]);
   var loginCol = findLoginColumn(headers);
   var nameCol = findNameColumn(headers);
-  var valueCol = findValueColumn(headers, indicatorKeywords);
+  var valueCol = findValueColumn(headers, sheetData, indicatorKeywords);
   
-  if (!valueCol) {
-    // Try numeric columns - look for percentage-like values
-    for (var i = 0; i < headers.length; i++) {
-      var vals = sheetData.map(function(r) { 
-        var v = r[headers[i]];
-        var num = parseFloat(v);
-        return !isNaN(num) && num >= 0 && num <= 100 ? num : null;
-      }).filter(function(v) { return v !== null; });
-      
-      if (vals.length > sheetData.length * 0.3) {
-        valueCol = headers[i];
-        break;
-      }
-    }
-  }
+  console.log("extractIndicatorData -", "Headers:", headers.length, "LoginCol:", loginCol, "ValueCol:", valueCol);
   
   var result = {consolidated: null, byAnalyst: {}};
   var allValues = [];
-  var analystCount = {};
+  var analystValues = [];
   
   if (sheetData.length && valueCol) {
-    sheetData.forEach(function(row) {
+    console.log("Processando", sheetData.length, "linhas");
+    sheetData.forEach(function(row, rowIndex) {
       var rawVal = row[valueCol];
       var val = parseFloat(rawVal);
       
       // Skip invalid values
-      if (isNaN(val)) return;
+      if (isNaN(val) || val < 0) return;
       
       // Normalize value to 0-100 range
       if (val > 100) val = val / 100;
-      if (val < 0) return;
+      if (val > 1) val = val; // Already in 0-100 range
+      else if (val > 0 && val <= 1) val = val * 100; // 0-1 range, convert to 0-100
+      
+      val = Math.round(val * 100) / 100;
       
       var login = "";
       if (loginCol) {
-        login = String(row[loginCol]).toUpperCase().trim();
+        login = String(row[loginCol] || "").toUpperCase().trim();
         // Remove spaces and special characters from login for matching
         login = login.replace(/\s+/g, "");
       }
@@ -393,7 +410,8 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
         }
         result.byAnalyst[login].push(val);
         allValues.push(val);
-      } else if (!loginCol && !isKnownAnalyst) {
+        analystValues.push(val);
+      } else if (!loginCol) {
         // No login column - treat as consolidated data
         allValues.push(val);
       }
@@ -408,11 +426,14 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
     }
   });
   
-  // Calculate consolidated value
-  if (allValues.length > 0) {
+  // Calculate consolidated value - prefer analyst average if available, otherwise all values
+  if (analystValues.length > 0) {
+    result.consolidated = Math.round((analystValues.reduce(function(a,b){return a+b;},0) / analystValues.length) * 100) / 100;
+  } else if (allValues.length > 0) {
     result.consolidated = Math.round((allValues.reduce(function(a,b){return a+b;},0) / allValues.length) * 100) / 100;
   }
   
+  console.log("extractIndicatorData - Result:", result);
   return result;
 }
 
@@ -424,6 +445,9 @@ function processarDados() {
 
   setTimeout(function() {
     fill.style.width = "30%";
+
+    console.log("=== INICIANDO PROCESSAMENTO ===");
+    console.log("Arquivos carregados:", Object.keys(parsedData));
 
     // Initialize data structures
     var consolidadoEmp = {};
@@ -454,8 +478,11 @@ function processarDados() {
 
     // Process each uploaded file
     Object.keys(parsedData).forEach(function(key) {
+      console.log("\n--- Processando arquivo:", key, "---");
       var pd = parsedData[key];
       var indicators = fileIndicatorMap[key] || [];
+      console.log("Indicadores esperados:", indicators);
+      console.log("Dados:", pd.mainData.length, "linhas");
       
       if (key === "analitico") {
         // For the analytics file, try to extract all indicators from multiple sheets or columns
@@ -544,10 +571,27 @@ function processarDados() {
         indicators.forEach(function(ind) {
           var keywords = ind.split(/[\s-]+/).filter(function(s){return s.length > 2;});
           var extracted = extractIndicatorData(pd.mainData, keywords);
+          console.log("Indicador:", ind, "Extracted:", extracted);
+          
           if (extracted.consolidated !== null) {
             consolidadoEmp[ind] = consolidadoEmp[ind] || extracted.consolidated;
             consolidadoRes[ind] = consolidadoRes[ind] || extracted.consolidated;
           }
+          
+          // If no consolidated but has analyst data, calculate from analysts
+          if (extracted.consolidated === null && Object.keys(extracted.byAnalyst).length > 0) {
+            var vals = [];
+            Object.keys(extracted.byAnalyst).forEach(function(login) {
+              vals.push(extracted.byAnalyst[login]);
+            });
+            if (vals.length > 0) {
+              var avg = vals.reduce(function(a,b){return a+b;},0) / vals.length;
+              extracted.consolidated = Math.round(avg * 100) / 100;
+              consolidadoEmp[ind] = consolidadoEmp[ind] || extracted.consolidated;
+              consolidadoRes[ind] = consolidadoRes[ind] || extracted.consolidated;
+            }
+          }
+          
           Object.keys(extracted.byAnalyst).forEach(function(login) {
             var isEmp = EMPRESARIAL.some(function(a){return a.login.toUpperCase()===login;});
             var isRes = RESIDENCIAL.some(function(a){return a.login.toUpperCase()===login;});
@@ -570,6 +614,11 @@ function processarDados() {
       else if (r !== null) dadosConsolidado[ind] = r;
       else dadosConsolidado[ind] = null;
     });
+
+    console.log("\n=== RESULTADOS FINAIS ===");
+    console.log("Consolidado Empresarial:", consolidadoEmp);
+    console.log("Consolidado Residencial:", consolidadoRes);
+    console.log("Consolidado Total:", dadosConsolidado);
 
     fill.style.width = "80%";
 
