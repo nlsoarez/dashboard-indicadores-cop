@@ -368,7 +368,29 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
   var analystValues = [];
   
   if (sheetData.length && valueCol) {
-    console.log("Processando", sheetData.length, "linhas");
+    console.log("Processando", sheetData.length, "linhas para coluna:", valueCol);
+    
+    // Se não encontrou login col, tenta usar primeira coluna com texto não-vazio
+    if (!loginCol) {
+      for (var hi = 0; hi < headers.length; hi++) {
+        if (headers[hi].indexOf("__EMPTY") === -1 && headers[hi] !== valueCol) {
+          var hasTextValues = false;
+          for (var ri = 0; ri < Math.min(sheetData.length, 5); ri++) {
+            var val = sheetData[ri][headers[hi]];
+            if (val && String(val).trim().length > 0 && isNaN(parseFloat(val))) {
+              hasTextValues = true;
+              break;
+            }
+          }
+          if (hasTextValues) {
+            loginCol = headers[hi];
+            console.log("Usando como LoginCol (autodectectado):", loginCol);
+            break;
+          }
+        }
+      }
+    }
+    
     sheetData.forEach(function(row, rowIndex) {
       var rawVal = row[valueCol];
       var val = parseFloat(rawVal);
@@ -570,8 +592,28 @@ function processarDados() {
         // For individual indicator files
         indicators.forEach(function(ind) {
           var keywords = ind.split(/[\s-]+/).filter(function(s){return s.length > 2;});
+          
+          // Try main data first
           var extracted = extractIndicatorData(pd.mainData, keywords);
-          console.log("Indicador:", ind, "Extracted:", extracted);
+          console.log("Tentativa 1 - Main data - Indicador:", ind, "Extracted:", extracted);
+          
+          // If no data found, try alternate sheets
+          if (extracted.consolidated === null && Object.keys(extracted.byAnalyst).length === 0 && pd.sheetNames.length > 1) {
+            console.log("Sem dados na aba principal, tentando abas alternativas...");
+            // Try sheets with "Analista" or "Analyst" in the name
+            for (var si = 0; si < pd.sheetNames.length; si++) {
+              var sheetName = pd.sheetNames[si];
+              if (sheetName.toUpperCase().indexOf("ANALISTA") !== -1 || sheetName.toUpperCase().indexOf("ANALYST") !== -1) {
+                console.log("Tentando aba:", sheetName);
+                extracted = extractIndicatorData(pd.sheets[sheetName], keywords);
+                console.log("Tentativa - Aba", sheetName, "- Indicador:", ind, ":", extracted);
+                if (extracted.consolidated !== null || Object.keys(extracted.byAnalyst).length > 0) {
+                  console.log("Dados encontrados na aba:", sheetName);
+                  break;
+                }
+              }
+            }
+          }
           
           if (extracted.consolidated !== null) {
             consolidadoEmp[ind] = consolidadoEmp[ind] || extracted.consolidated;
