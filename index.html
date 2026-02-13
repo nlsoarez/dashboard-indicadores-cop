@@ -314,15 +314,15 @@ function findColumnByKeywords(headers, keywords) {
 }
 
 function findLoginColumn(headers) {
-  return findColumnByKeywords(headers, ["LOGIN","MATRICULA","MATRÍCULA","RE","REGISTRO","USUARIO","USUÁRIO"]);
+  return findColumnByKeywords(headers, ["LOGIN","MATRICULA","MATRÍCULA","RE","REGISTRO","USUARIO","USUÁRIO","AGENT","COLABORADOR ID","TECH ID"]);
 }
 
 function findNameColumn(headers) {
-  return findColumnByKeywords(headers, ["NOME","ANALISTA","COLABORADOR","FUNCIONARIO","FUNCIONÁRIO"]);
+  return findColumnByKeywords(headers, ["NOME","ANALISTA","COLABORADOR","FUNCIONARIO","FUNCIONÁRIO","AGENT NAME","TECH NAME"]);
 }
 
 function findValueColumn(headers, extraKeywords) {
-  var kw = ["PERCENTUAL","%","VALOR","RESULTADO","RESULTADO","TAXA","RATE","INDICADOR"];
+  var kw = ["PERCENTUAL","%","VALOR","RESULTADO","TAXA","RATE","INDICADOR","ATINGIMENTO","PERFORMANCE"];
   if (extraKeywords) kw = extraKeywords.concat(kw);
   return findColumnByKeywords(headers, kw);
 }
@@ -335,11 +335,14 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
   var valueCol = findValueColumn(headers, indicatorKeywords);
   
   if (!valueCol) {
-    // Try numeric columns
+    // Try numeric columns - look for percentage-like values
     for (var i = 0; i < headers.length; i++) {
-      var vals = sheetData.map(function(r) { return r[headers[i]]; }).filter(function(v) {
-        return typeof v === "number" || (typeof v === "string" && !isNaN(parseFloat(v)) && parseFloat(v) > 0 && parseFloat(v) <= 100);
-      });
+      var vals = sheetData.map(function(r) { 
+        var v = r[headers[i]];
+        var num = parseFloat(v);
+        return !isNaN(num) && num >= 0 && num <= 100 ? num : null;
+      }).filter(function(v) { return v !== null; });
+      
       if (vals.length > sheetData.length * 0.3) {
         valueCol = headers[i];
         break;
@@ -349,29 +352,65 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
   
   var result = {consolidated: null, byAnalyst: {}};
   var allValues = [];
+  var analystCount = {};
   
   if (sheetData.length && valueCol) {
     sheetData.forEach(function(row) {
-      var val = parseFloat(row[valueCol]);
+      var rawVal = row[valueCol];
+      var val = parseFloat(rawVal);
+      
+      // Skip invalid values
       if (isNaN(val)) return;
-      var login = loginCol ? String(row[loginCol]).toUpperCase().trim() : "";
-      if (login && allLogins.indexOf(login) !== -1) {
-        result.byAnalyst[login] = Math.round(val * 100) / 100;
+      
+      // Normalize value to 0-100 range
+      if (val > 100) val = val / 100;
+      if (val < 0) return;
+      
+      var login = "";
+      if (loginCol) {
+        login = String(row[loginCol]).toUpperCase().trim();
+        // Remove spaces and special characters from login for matching
+        login = login.replace(/\s+/g, "");
+      }
+      
+      // Check if login is in our analysts list
+      var isKnownAnalyst = false;
+      if (login && allLogins.length > 0) {
+        for (var i = 0; i < allLogins.length; i++) {
+          var cleanLogin = allLogins[i].replace(/\s+/g, "");
+          if (cleanLogin === login || allLogins[i] === login) {
+            login = allLogins[i]; // Use the original login from our list
+            isKnownAnalyst = true;
+            break;
+          }
+        }
+      }
+      
+      if (login && isKnownAnalyst) {
+        // For analysts with per-row data, use average if multiple entries
+        if (!result.byAnalyst[login]) {
+          result.byAnalyst[login] = [];
+        }
+        result.byAnalyst[login].push(val);
         allValues.push(val);
-      } else if (!loginCol) {
+      } else if (!loginCol && !isKnownAnalyst) {
+        // No login column - treat as consolidated data
         allValues.push(val);
       }
     });
   }
   
+  // Calculate averages for each analyst
+  Object.keys(result.byAnalyst).forEach(function(login) {
+    var values = result.byAnalyst[login];
+    if (values.length > 0) {
+      result.byAnalyst[login] = Math.round((values.reduce(function(a,b){return a+b;},0) / values.length) * 100) / 100;
+    }
+  });
+  
+  // Calculate consolidated value
   if (allValues.length > 0) {
     result.consolidated = Math.round((allValues.reduce(function(a,b){return a+b;},0) / allValues.length) * 100) / 100;
-  }
-  
-  // If no per-analyst data but consolidated exists, check if first row has a general value
-  if (Object.keys(result.byAnalyst).length === 0 && !result.consolidated && sheetData.length > 0 && valueCol) {
-    var firstVal = parseFloat(sheetData[0][valueCol]);
-    if (!isNaN(firstVal)) result.consolidated = Math.round(firstVal * 100) / 100;
   }
   
   return result;
@@ -425,38 +464,58 @@ function processarDados() {
           var headers = Object.keys(mainData[0]);
           var loginCol = findLoginColumn(headers);
           
-          // Try to find columns matching each indicator
-          INDICADORES.forEach(function(ind) {
-            var searchTerms = ind.split(/[\s-]+/).filter(function(s){return s.length > 2;});
-            var col = findColumnByKeywords(headers, searchTerms);
-            if (!col) col = findColumnByKeywords(headers, [ind]);
-            
-            if (col && loginCol) {
-              var empVals = [];
-              var resVals = [];
-              mainData.forEach(function(row) {
-                var login = String(row[loginCol]).toUpperCase().trim();
-                var val = parseFloat(row[col]);
-                if (isNaN(val)) return;
-                val = Math.round(val * 100) / 100;
-                
-                var isEmp = EMPRESARIAL.some(function(a){return a.login.toUpperCase()===login;});
-                var isRes = RESIDENCIAL.some(function(a){return a.login.toUpperCase()===login;});
-                
-                if (isEmp) {
-                  empAnalistas[login] = empAnalistas[login] || {};
-                  empAnalistas[login][ind] = val;
-                  empVals.push(val);
-                } else if (isRes) {
-                  resAnalistas[login] = resAnalistas[login] || {};
-                  resAnalistas[login][ind] = val;
-                  resVals.push(val);
-                }
-              });
-              if (empVals.length > 0) consolidadoEmp[ind] = Math.round((empVals.reduce(function(a,b){return a+b;},0)/empVals.length)*100)/100;
-              if (resVals.length > 0) consolidadoRes[ind] = Math.round((resVals.reduce(function(a,b){return a+b;},0)/resVals.length)*100)/100;
-            }
-          });
+          if (loginCol) {
+            // Try to find columns matching each indicator
+            INDICADORES.forEach(function(ind) {
+              var searchTerms = ind.split(/[\s-]+/).filter(function(s){return s.length > 2;});
+              var col = findColumnByKeywords(headers, searchTerms);
+              if (!col) col = findColumnByKeywords(headers, [ind]);
+              
+              if (col) {
+                var empVals = [];
+                var resVals = [];
+                mainData.forEach(function(row) {
+                  var rawLogin = String(row[loginCol] || "").toUpperCase().trim();
+                  var cleanLogin = rawLogin.replace(/\s+/g, "");
+                  var val = parseFloat(row[col]);
+                  if (isNaN(val)) return;
+                  
+                  // Normalize value to 0-100 range
+                  if (val > 100) val = val / 100;
+                  if (val < 0) return;
+                  
+                  val = Math.round(val * 100) / 100;
+                  
+                  // Find matching analyst from our list
+                  var matchedAnalyst = null;
+                  for (var i = 0; i < allLogins.length; i++) {
+                    var cleanRef = allLogins[i].replace(/\s+/g, "");
+                    if (cleanRef === cleanLogin || allLogins[i] === rawLogin) {
+                      matchedAnalyst = allLogins[i];
+                      break;
+                    }
+                  }
+                  
+                  if (matchedAnalyst) {
+                    var isEmp = EMPRESARIAL.some(function(a){return a.login.toUpperCase()===matchedAnalyst;});
+                    var isRes = RESIDENCIAL.some(function(a){return a.login.toUpperCase()===matchedAnalyst;});
+                    
+                    if (isEmp) {
+                      empAnalistas[matchedAnalyst] = empAnalistas[matchedAnalyst] || {};
+                      empAnalistas[matchedAnalyst][ind] = val;
+                      empVals.push(val);
+                    } else if (isRes) {
+                      resAnalistas[matchedAnalyst] = resAnalistas[matchedAnalyst] || {};
+                      resAnalistas[matchedAnalyst][ind] = val;
+                      resVals.push(val);
+                    }
+                  }
+                });
+                if (empVals.length > 0) consolidadoEmp[ind] = Math.round((empVals.reduce(function(a,b){return a+b;},0)/empVals.length)*100)/100;
+                if (resVals.length > 0) consolidadoRes[ind] = Math.round((resVals.reduce(function(a,b){return a+b;},0)/resVals.length)*100)/100;
+              }
+            });
+          }
           
           // Also try each sheet for different indicators
           pd.sheetNames.forEach(function(sheetName) {
@@ -471,8 +530,10 @@ function processarDados() {
                   if (consolidadoEmp[ind] === null) consolidadoEmp[ind] = extracted.consolidated;
                 }
                 Object.keys(extracted.byAnalyst).forEach(function(login) {
-                  if (empAnalistas[login] && empAnalistas[login][ind] === null) empAnalistas[login][ind] = extracted.byAnalyst[login];
-                  if (resAnalistas[login] && resAnalistas[login][ind] === null) resAnalistas[login][ind] = extracted.byAnalyst[login];
+                  var isEmp = EMPRESARIAL.some(function(a){return a.login.toUpperCase()===login;});
+                  var isRes = RESIDENCIAL.some(function(a){return a.login.toUpperCase()===login;});
+                  if (isEmp && empAnalistas[login] && empAnalistas[login][ind] === null) empAnalistas[login][ind] = extracted.byAnalyst[login];
+                  if (isRes && resAnalistas[login] && resAnalistas[login][ind] === null) resAnalistas[login][ind] = extracted.byAnalyst[login];
                 });
               }
             });
@@ -488,8 +549,10 @@ function processarDados() {
             consolidadoRes[ind] = consolidadoRes[ind] || extracted.consolidated;
           }
           Object.keys(extracted.byAnalyst).forEach(function(login) {
-            if (empAnalistas[login]) empAnalistas[login][ind] = extracted.byAnalyst[login];
-            if (resAnalistas[login]) resAnalistas[login][ind] = extracted.byAnalyst[login];
+            var isEmp = EMPRESARIAL.some(function(a){return a.login.toUpperCase()===login;});
+            var isRes = RESIDENCIAL.some(function(a){return a.login.toUpperCase()===login;});
+            if (isEmp && empAnalistas[login]) empAnalistas[login][ind] = extracted.byAnalyst[login];
+            if (isRes && resAnalistas[login]) resAnalistas[login][ind] = extracted.byAnalyst[login];
           });
         });
       }
