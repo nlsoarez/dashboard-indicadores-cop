@@ -367,147 +367,126 @@ function findValueColumn(headers, sheetData, extraKeywords) {
 function extractIndicatorData(sheetData, indicatorKeywords) {
   if (!sheetData || !sheetData.length) return {consolidated: null, byAnalyst: {}};
   
-  // IMPORTANTE: A aba pode ter linhas vazias no início, precisa encontrar o cabeçalho real
-  var startRow = 0;
-  for (var si = 0; si < sheetData.length; si++) {
-    var row = sheetData[si];
-    var hasData = false;
+  // ESTRATÉGIA: Procura por padrões nos dados
+  // 1. Encontra linhas com dados reais (não vazias)
+  // 2. Identifica qual coluna tem nomes/logins
+  // 3. Identifica qual coluna tem percentuais
+  // 4. Ignora linhas de resumo/total
+  
+  var validRows = [];
+  for (var ri = 0; ri < sheetData.length; ri++) {
+    var row = sheetData[ri];
+    var isEmpty = true;
     for (var key in row) {
-      var val = row[key];
-      if (val !== null && val !== undefined && String(val).trim().length > 0) {
-        hasData = true;
+      if (row[key] !== null && row[key] !== undefined && String(row[key]).trim().length > 0) {
+        isEmpty = false;
         break;
       }
     }
-    if (hasData) {
-      startRow = si;
-      break;
-    }
+    if (!isEmpty) validRows.push({index: ri, data: row});
   }
   
-  console.log("Primeira linha com dados:", startRow, sheetData[startRow]);
-  
-  var actualData = sheetData.slice(startRow === 0 ? 0 : startRow + 1);
-  if (actualData.length === 0) {
-    console.log("Nenhum dado encontrado após skip de linhas vazias");
+  console.log("Linhas válidas (não vazias):", validRows.length);
+  if (validRows.length < 2) {
+    console.log("Nenhuma linha válida encontrada");
     return {consolidated: null, byAnalyst: {}};
   }
   
-  var headers = Object.keys(actualData[0]);
-  console.log("extractIndicatorData - Total headers:", headers.length);
-  console.log("Todos os headers:", headers);
+  // Segunda estratégia: usar a PRIMEIRA linha válida como cabeçalho
+  var headerRow = validRows[0].data;
+  var headers = Object.keys(headerRow);
   
-  // LOG: Mostra amostra de dados para DEBUG
-  for (var logH = 0; logH < headers.length; logH++) {
-    var h = headers[logH];
-    var sample = [];
-    for (var logR = 0; logR < Math.min(3, actualData.length); logR++) {
-      sample.push(actualData[logR][h]);
+  // Filtra headers vazios e normalizados
+  var cleanHeaders = [];
+  for (var hi = 0; hi < headers.length; hi++) {
+    var h = String(headers[hi] || "").trim();
+    if (h.length > 0 && h.indexOf("__EMPTY") === -1) {
+      cleanHeaders.push({original: headers[hi], clean: h});
     }
-    console.log("  Col", logH, "(" + h + "):", sample);
   }
   
-  // Primeiro, acha coluna de VALOR (percentuais 0-100)
-  var valueCol = findValueColumn(headers, actualData, indicatorKeywords);
-  console.log("ValueCol encontrada:", valueCol);
+  console.log("Headers válidos encontrados:", cleanHeaders.length);
+  for (var chi = 0; chi < cleanHeaders.length; chi++) {
+    console.log("  [" + chi + "]", cleanHeaders[chi].clean);
+  }
   
-  // Depois, acha coluna de LOGIN (que não seja valueCol e tenha texto)
-  var loginCol = null;
-  if (valueCol) {
-    // Procura coluna com texto que não seja a coluna de valor
-    for (var i = 0; i < headers.length; i++) {
-      var h = headers[i];
-      // Pula colunas vazias e a coluna de valor (E colunas que parecem valores duplicados)
-      if (h.indexOf("__EMPTY") !== -1 || h === valueCol) continue;
-      if (h.indexOf(valueCol) !== -1 && h !== valueCol) continue; // Pula colunas duplicadas da coluna de valor
-      
-      // Verifica se essa coluna tem texto (possíveis nomes/logins)
-      var hasText = false;
-      var hasNumbers = true;
-      for (var j = 0; j < Math.min(actualData.length, 5); j++) {
-        var val = actualData[j][h];
-        if (!val || String(val).trim().length === 0) continue;
-        
-        var isNum = !isNaN(parseFloat(val));
-        var isText = String(val).trim().length > 0 && !isNum;
-        
-        if (isText) hasText = true;
-        if (!isNum) hasNumbers = false;
-      }
-      
-      if (hasText && !hasNumbers) {
-        loginCol = h;
-        console.log("LoginCol encontrada (por texto):", loginCol);
+  // Agora processa linhas de dados (a partir da 2ª linha válida)
+  var allValues = [];
+  var analystValues = [];
+  var result = {consolidated: null, byAnalyst: {}};
+  
+  // Para cada linha de dado (pulando o cabeçalho)
+  for (var dri = 1; dri < validRows.length; dri++) {
+    var dataRow = validRows[dri].data;
+    var rowText = JSON.stringify(dataRow);
+    
+    // Pula linhas de resumo
+    if (rowText.toUpperCase().indexOf("TOTAL") !== -1 || 
+        rowText.toUpperCase().indexOf("CONSOLIDADO") !== -1) {
+      continue;
+    }
+    
+    // Procura valor percentual nessa linha
+    var foundValue = null;
+    var foundValueCol = null;
+    
+    for (var chi2 = 0; chi2 < cleanHeaders.length; chi2++) {
+      var h = cleanHeaders[chi2].original;
+      var val = parseFloat(dataRow[h]);
+      if (!isNaN(val) && val > 0 && val <= 100) {
+        foundValue = val;
+        foundValueCol = cleanHeaders[chi2].clean;
         break;
       }
     }
-  }
-  
-  // Fallback: usa a função padrão se não encontrou
-  if (!loginCol) {
-    loginCol = findLoginColumn(headers);
-    console.log("LoginCol encontrada (padrão):", loginCol);
-  }
-  
-  console.log("extractIndicatorData - Headers:", headers.length, "LoginCol:", loginCol, "ValueCol:", valueCol);
-  
-  var result = {consolidated: null, byAnalyst: {}};
-  var allValues = [];
-  var analystValues = [];
-  
-  if (actualData.length && valueCol) {
-    console.log("Processando", actualData.length, "linhas com ValueCol:", valueCol, "LoginCol:", loginCol);
     
-    actualData.forEach(function(row, rowIndex) {
-      var rawVal = row[valueCol];
-      var val = parseFloat(rawVal);
+    if (!foundValue) continue; // Skip linha sem valor percentual
+    
+    // Procura nome/login nessa linha (coluna com texto)
+    var foundLogin = null;
+    for (var chi3 = 0; chi3 < cleanHeaders.length; chi3++) {
+      var h2 = cleanHeaders[chi3].original;
+      var val2 = String(dataRow[h2] || "").trim();
       
-      // Skip invalid values
-      if (isNaN(val) || val < 0) return;
-      
-      // Normalize value to 0-100 range
-      if (val > 100) val = val / 100;
-      if (val > 1) val = val; // Already in 0-100 range
-      else if (val > 0 && val <= 1) val = val * 100; // 0-1 range, convert to 0-100
-      
-      val = Math.round(val * 100) / 100;
-      
-      var login = "";
-      if (loginCol) {
-        login = String(row[loginCol] || "").toUpperCase().trim();
-        // Remove spaces and special characters from login for matching
-        login = login.replace(/\s+/g, "");
+      if (val2.length > 0 && isNaN(parseFloat(val2))) {
+        // É texto! Pode ser login
+        foundLogin = val2.toUpperCase();
+        break;
       }
-      
-      // Check if login is in our analysts list
-      var isKnownAnalyst = false;
-      if (login && allLogins.length > 0) {
-        for (var i = 0; i < allLogins.length; i++) {
-          var cleanLogin = allLogins[i].replace(/\s+/g, "");
-          if (cleanLogin === login || allLogins[i] === login) {
-            login = allLogins[i]; // Use the original login from our list
-            isKnownAnalyst = true;
-            break;
-          }
+    }
+    
+    console.log("Linha", dri, "- Login:", foundLogin, "| Valor:", foundValue, "| ColValor:", foundValueCol);
+    
+    // Normaliza login para matching
+    var login = foundLogin ? foundLogin.replace(/\s+/g, "") : "";
+    
+    // Checa se está na lista de analistas
+    var isKnownAnalyst = false;
+    if (login && allLogins.length > 0) {
+      for (var i = 0; i < allLogins.length; i++) {
+        var cleanLogin = allLogins[i].replace(/\s+/g, "");
+        if (cleanLogin === login || allLogins[i].toUpperCase() === foundLogin) {
+          login = allLogins[i];
+          isKnownAnalyst = true;
+          break;
         }
       }
-      
-      if (login && isKnownAnalyst) {
-        // For analysts with per-row data, use average if multiple entries
-        if (!result.byAnalyst[login]) {
-          result.byAnalyst[login] = [];
-        }
-        result.byAnalyst[login].push(val);
-        allValues.push(val);
-        analystValues.push(val);
-      } else if (!loginCol) {
-        // No login column - treat as consolidated data
-        allValues.push(val);
+    }
+    
+    if (isKnownAnalyst) {
+      if (!result.byAnalyst[login]) {
+        result.byAnalyst[login] = [];
       }
-    });
+      result.byAnalyst[login].push(foundValue);
+      allValues.push(foundValue);
+      analystValues.push(foundValue);
+    } else if (!foundLogin) {
+      // Sem coluna de login identificada, trata como dado consolidado
+      allValues.push(foundValue);
+    }
   }
   
-  // Calculate averages for each analyst
+  // Calcula médias por analista
   Object.keys(result.byAnalyst).forEach(function(login) {
     var values = result.byAnalyst[login];
     if (values.length > 0) {
@@ -515,13 +494,14 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
     }
   });
   
-  // Calculate consolidated value - prefer analyst average if available, otherwise all values
+  // Calcula consolidado
   if (analystValues.length > 0) {
     result.consolidated = Math.round((analystValues.reduce(function(a,b){return a+b;},0) / analystValues.length) * 100) / 100;
   } else if (allValues.length > 0) {
     result.consolidated = Math.round((allValues.reduce(function(a,b){return a+b;},0) / allValues.length) * 100) / 100;
   }
   
+  console.log("extractIndicatorData - Resultado Final - Analistas encontrados:", Object.keys(result.byAnalyst).length, "| Consolidado:", result.consolidated);
   console.log("extractIndicatorData - Result:", result);
   return result;
 }
