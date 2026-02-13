@@ -1,10 +1,12 @@
 import traceback
+import io
 import pandas as pd
 import numpy as np
 import streamlit as st
 
 from src.config import (
     BASE_EQUIPE, EQUIPE_IDS, VOL_COLS,
+    VOL_COLS_RESIDENCIAL, VOL_COLS_EMPRESARIAL, VOL_COLS_AMBOS,
     COL_LOGIN, COL_NOME, COL_BASE, COL_DATA, COL_MES, COL_ANOMES,
     COL_VOL_TOTAL, COL_DPA_RESULTADO,
     COR_PRIMARIA, COR_SUCESSO, COR_ALERTA, COR_PERIGO, COR_INFO,
@@ -130,6 +132,17 @@ def format_ranking(df_rank, value_col, label, ascending=False, suffix="%"):
     return df_sorted
 
 
+def get_sector_vol_cols(setor, available_cols):
+    """Returns {col_name: display_label} for the given sector filter."""
+    cols = {}
+    if setor in ("Todos", "RESIDENCIAL"):
+        cols.update(VOL_COLS_RESIDENCIAL)
+    if setor in ("Todos", "EMPRESARIAL"):
+        cols.update(VOL_COLS_EMPRESARIAL)
+    cols.update(VOL_COLS_AMBOS)
+    return {k: v for k, v in cols.items() if k in available_cols}
+
+
 # =====================================================
 # HEADER
 # =====================================================
@@ -142,7 +155,7 @@ st.markdown("""
 
 
 # =====================================================
-# UPLOAD
+# UPLOAD (persiste dados no session_state)
 # =====================================================
 with st.container():
     col_upload, col_info = st.columns([2, 1])
@@ -159,7 +172,12 @@ with st.container():
             f"Residencial: {len(BASE_EQUIPE[BASE_EQUIPE['Setor']=='RESIDENCIAL'])}"
         )
 
-if uploaded_file is None:
+# Cache uploaded file in session_state to survive reruns
+if uploaded_file is not None:
+    st.session_state["uploaded_bytes"] = uploaded_file.getvalue()
+    st.session_state["uploaded_name"] = uploaded_file.name
+
+if "uploaded_bytes" not in st.session_state:
     st.markdown("---")
     st.markdown("### 👋 Bem-vindo!")
     st.markdown(
@@ -177,7 +195,8 @@ if uploaded_file is None:
 # =====================================================
 try:
     with st.spinner("Carregando e processando dados..."):
-        df = load_produtividade(uploaded_file)
+        file_obj = io.BytesIO(st.session_state["uploaded_bytes"])
+        df = load_produtividade(file_obj)
 
     if df.empty:
         st.error("Nenhum analista da equipe encontrado na planilha. Verifique o arquivo.")
@@ -210,6 +229,12 @@ with st.sidebar:
         "Setor",
         options=["Todos", "EMPRESARIAL", "RESIDENCIAL"],
     )
+
+    st.markdown("---")
+    if st.button("🗑️ Limpar dados carregados", use_container_width=True):
+        for key in ["uploaded_bytes", "uploaded_name"]:
+            st.session_state.pop(key, None)
+        st.rerun()
 
     st.markdown("---")
     st.markdown("### 📊 Equipe")
@@ -358,7 +383,9 @@ with tab1:
             display_dpa = rank_dpa[["Nome", "Setor", "DPA_Media"]].copy()
             display_dpa.columns = ["Analista", "Setor", "DPA %"]
             st.dataframe(
-                display_dpa.style.background_gradient(cmap="RdYlGn", subset=["DPA %"], vmin=50, vmax=100),
+                display_dpa.style
+                    .format({"DPA %": "{:.1f}"})
+                    .background_gradient(cmap="RdYlGn", subset=["DPA %"], vmin=50, vmax=100),
                 use_container_width=True,
                 height=500,
             )
@@ -374,6 +401,21 @@ with tab1:
         # Gráfico de barras horizontal
         chart_data = rank_media[["Nome", "Media_Diaria"]].set_index("Nome").sort_values("Media_Diaria")
         st.bar_chart(chart_data, horizontal=True, color=COR_PRIMARIA, height=500)
+
+        # Detalhamento de volumes por analista
+        sector_vol = get_sector_vol_cols(setor_selecionado, resumo.columns)
+        if sector_vol:
+            st.markdown("#### 📋 Detalhamento de Volumes por Analista")
+            vol_detail = resumo[[COL_NOME, "Setor"] + list(sector_vol.keys())].copy()
+            vol_detail["Nome"] = vol_detail[COL_NOME].apply(primeiro_nome)
+            vol_detail = vol_detail[["Nome", "Setor"] + list(sector_vol.keys())].copy()
+            rename_map = {k: v for k, v in sector_vol.items()}
+            vol_detail = vol_detail.rename(columns=rename_map)
+            vol_detail = vol_detail.rename(columns={"Nome": "Analista"})
+            vol_detail = vol_detail.sort_values("Analista").reset_index(drop=True)
+            vol_detail.index = vol_detail.index + 1
+            vol_detail.index.name = "#"
+            st.dataframe(vol_detail, use_container_width=True, height=500)
 
 
 # ---- TAB 2: EVOLUÇÃO DIÁRIA ----
@@ -460,14 +502,31 @@ with tab4:
     resumo_det = resumo_geral(df_filtrado)
 
     if not resumo_det.empty:
+        # Base columns
         display_cols = [COL_NOME, "Setor", "Dias_Trabalhados", COL_VOL_TOTAL, "Media_Diaria", "DPA_Media"]
-        available_cols = [c for c in display_cols if c in resumo_det.columns]
-        det = resumo_det[available_cols].copy()
-        det.columns = ["Analista", "Setor", "Dias", "Vol. Total", "Média/Dia", "DPA %"][:len(available_cols)]
+        display_labels = ["Analista", "Setor", "Dias", "Vol. Total", "Média/Dia", "DPA %"]
+
+        # Add sector-specific volume columns
+        sector_vol = get_sector_vol_cols(setor_selecionado, resumo_det.columns)
+        vol_keys = list(sector_vol.keys())
+        vol_labels = list(sector_vol.values())
+
+        available_base = [c for c in display_cols if c in resumo_det.columns]
+        available_labels = display_labels[:len(available_base)]
+
+        det = resumo_det[available_base + vol_keys].copy()
+        det.columns = available_labels + vol_labels
         det = det.sort_values("Vol. Total", ascending=False).reset_index(drop=True)
         det.index = det.index + 1
         det.index.name = "#"
-        st.dataframe(det, use_container_width=True)
+
+        format_dict = {}
+        if "DPA %" in det.columns:
+            format_dict["DPA %"] = "{:.1f}"
+        st.dataframe(
+            det.style.format(format_dict) if format_dict else det,
+            use_container_width=True,
+        )
 
     st.markdown("---")
     st.markdown("#### Dados Brutos (Filtrados)")
