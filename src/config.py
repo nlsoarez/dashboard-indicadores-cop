@@ -32,6 +32,9 @@ EQUIPE = [
 BASE_EQUIPE = pd.DataFrame(EQUIPE, columns=["Matricula", "Nome", "Setor"])
 EQUIPE_IDS = set(BASE_EQUIPE["Matricula"].tolist())
 
+# Líderes (supervisores)
+LIDERES_IDS = {"N0238475", "N5923221", "N6088107", "N5619600"}  # Marley, Kelly, Leandro, Bruno
+
 # =====================================================
 # COLUNAS ESPERADAS NA PLANILHA DE PRODUTIVIDADE
 # =====================================================

@@ -5,7 +5,7 @@ import numpy as np
 import streamlit as st
 
 from src.config import (
-    BASE_EQUIPE, EQUIPE_IDS, VOL_COLS,
+    BASE_EQUIPE, EQUIPE_IDS, LIDERES_IDS, VOL_COLS,
     VOL_COLS_RESIDENCIAL, VOL_COLS_EMPRESARIAL, VOL_COLS_AMBOS,
     COL_LOGIN, COL_NOME, COL_BASE, COL_DATA, COL_MES, COL_ANOMES,
     COL_VOL_TOTAL, COL_DPA_RESULTADO,
@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =====================================================
-# CSS CUSTOMIZADO
+# CSS — tema escuro profissional
 # =====================================================
 st.markdown("""
 <style>
@@ -37,114 +37,106 @@ st.markdown("""
         padding: 1.5rem 2rem;
         border-radius: 12px;
         margin-bottom: 1.5rem;
-        color: white;
     }
-    .main-header h1 { color: white; margin: 0; font-size: 1.8rem; }
-    .main-header p { color: #D6EAF8; margin: 0.3rem 0 0 0; font-size: 0.95rem; }
+    .main-header h1 { color: #fff !important; margin: 0; font-size: 1.8rem; }
+    .main-header p  { color: #D6EAF8 !important; margin: 0.3rem 0 0 0; font-size: 0.95rem; }
 
     /* KPI Cards */
     .kpi-card {
-        background: white;
+        background: var(--secondary-background-color);
         border-radius: 10px;
         padding: 1.2rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         border-left: 4px solid;
         text-align: center;
     }
-    .kpi-card .kpi-value {
-        font-size: 2rem;
-        font-weight: 700;
-        margin: 0.3rem 0;
-    }
+    .kpi-card .kpi-value { font-size: 1.8rem; font-weight: 700; margin: 0.3rem 0; }
     .kpi-card .kpi-label {
-        font-size: 0.82rem;
-        color: #7F8C8D;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        font-size: 0.78rem; opacity: 0.55;
+        text-transform: uppercase; letter-spacing: 0.5px;
     }
-    .kpi-card .kpi-delta {
-        font-size: 0.8rem;
-        margin-top: 0.2rem;
-    }
+    .kpi-card .kpi-delta { font-size: 0.8rem; margin-top: 0.2rem; }
 
     /* Section headers */
     .section-header {
-        font-size: 1.2rem;
-        font-weight: 600;
-        color: #1B4F72;
-        border-bottom: 2px solid #2980B9;
+        font-size: 1.15rem; font-weight: 600;
+        color: #5DADE2;
+        border-bottom: 2px solid rgba(41,128,185,0.4);
         padding-bottom: 0.4rem;
         margin: 1.5rem 0 1rem 0;
     }
 
-    /* Ranking badges */
-    .rank-badge {
-        display: inline-block;
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        text-align: center;
-        line-height: 28px;
-        font-weight: 700;
-        font-size: 0.85rem;
-        color: white;
-    }
-    .rank-1 { background: #F1C40F; color: #333; }
-    .rank-2 { background: #BDC3C7; color: #333; }
-    .rank-3 { background: #CD6155; }
-
-    /* Table styling */
-    .dataframe { font-size: 0.85rem !important; }
-
     /* Performance highlight cards */
     .perf-card {
-        padding: 0.9rem 1rem;
-        border-radius: 10px;
-        border-left: 4px solid;
-        margin-bottom: 0.5rem;
+        padding: 0.9rem 1rem; border-radius: 10px;
+        border-left: 4px solid; margin-bottom: 0.5rem;
     }
-    .perf-best {
-        background: linear-gradient(135deg, #d5f5e3 0%, #abebc6 100%);
-        border-left-color: #27AE60;
-    }
-    .perf-worst {
-        background: linear-gradient(135deg, #fadbd8 0%, #f5b7b1 100%);
-        border-left-color: #E74C3C;
-    }
-    .perf-dpa {
-        background: linear-gradient(135deg, #d6eaf8 0%, #aed6f1 100%);
-        border-left-color: #2980B9;
-    }
+    .perf-best  { background: rgba(39,174,96,0.12);  border-left-color: #2ECC71; }
+    .perf-worst { background: rgba(231,76,60,0.12);   border-left-color: #E74C3C; }
+    .perf-dpa   { background: rgba(41,128,185,0.12);  border-left-color: #5DADE2; }
+    .perf-card .p-title  { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .perf-card .p-name   { font-size: 1.1rem; font-weight: 700; }
+    .perf-card .p-detail { font-size: 0.82rem; opacity: 0.7; margin-top: 0.15rem; }
 
     /* Insight cards */
     .insight-card {
-        background: white;
+        background: var(--secondary-background-color);
         border-radius: 10px;
-        padding: 0.9rem 1rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        padding: 0.85rem 1rem;
         margin-bottom: 0.6rem;
-        border-left: 4px solid #2980B9;
+        border-left: 4px solid #5DADE2;
     }
     .tag-green {
-        background: #d5f5e3; color: #1e8449;
-        padding: 1px 7px; border-radius: 10px;
-        font-size: 0.75rem; display: inline-block; margin: 1px 2px;
+        background: rgba(46,204,113,0.18); color: #2ECC71;
+        padding: 2px 8px; border-radius: 10px;
+        font-size: 0.73rem; font-weight: 500;
+        display: inline-block; margin: 1px 2px;
     }
     .tag-red {
-        background: #fadbd8; color: #922b21;
-        padding: 1px 7px; border-radius: 10px;
-        font-size: 0.75rem; display: inline-block; margin: 1px 2px;
+        background: rgba(231,76,60,0.18); color: #E74C3C;
+        padding: 2px 8px; border-radius: 10px;
+        font-size: 0.73rem; font-weight: 500;
+        display: inline-block; margin: 1px 2px;
     }
     .sector-badge {
-        background: #eaf2f8; color: #2c3e50;
-        padding: 1px 7px; border-radius: 8px;
-        font-size: 0.72rem; margin-left: 6px;
+        background: rgba(93,173,226,0.15); color: #5DADE2;
+        padding: 2px 8px; border-radius: 8px;
+        font-size: 0.72rem; font-weight: 500; margin-left: 6px;
     }
     .rank-pill {
-        background: #f0f0f0; color: #555;
-        padding: 1px 7px; border-radius: 8px;
-        font-size: 0.72rem; margin-left: 3px;
+        background: rgba(255,255,255,0.06);
+        padding: 2px 8px; border-radius: 8px;
+        font-size: 0.72rem; opacity: 0.55; margin-left: 3px;
     }
+
+    /* Leader cards */
+    .leader-card {
+        background: var(--secondary-background-color);
+        border-radius: 12px;
+        padding: 1rem 1.2rem;
+        border-top: 3px solid #F1C40F;
+        margin-bottom: 0.8rem;
+    }
+    .leader-card .l-name  { font-size: 1.05rem; font-weight: 700; }
+    .leader-card .l-badge {
+        background: rgba(241,196,15,0.15); color: #F1C40F;
+        padding: 2px 8px; border-radius: 8px;
+        font-size: 0.72rem; font-weight: 600; margin-left: 6px;
+    }
+    .leader-card .l-stat  { font-size: 0.82rem; opacity: 0.7; margin-top: 0.3rem; }
+    .leader-card .l-vol   { font-size: 1.4rem; font-weight: 700; color: #5DADE2; }
+
+    /* Sector header pills */
+    .sector-header {
+        display: inline-block;
+        padding: 0.35rem 1rem; border-radius: 8px;
+        font-weight: 600; font-size: 0.9rem;
+        margin-bottom: 0.6rem;
+    }
+    .sector-res { background: rgba(41,128,185,0.15); color: #5DADE2; }
+    .sector-emp { background: rgba(243,156,18,0.15); color: #F39C12; }
+
+    /* Table styling */
+    .dataframe { font-size: 0.85rem !important; }
 
     /* Sidebar */
     [data-testid="stSidebar"] {
@@ -174,14 +166,6 @@ def kpi_card(label, value, color, delta=None, suffix=""):
     """
 
 
-def format_ranking(df_rank, value_col, label, ascending=False, suffix="%"):
-    """Formata ranking com badges para top 3."""
-    df_sorted = df_rank.sort_values(value_col, ascending=ascending, na_position="last").reset_index(drop=True)
-    df_sorted.index = df_sorted.index + 1
-    df_sorted.index.name = "#"
-    return df_sorted
-
-
 def get_sector_vol_cols(setor, available_cols):
     """Returns {col_name: display_label} for the given sector filter."""
     cols = {}
@@ -191,6 +175,172 @@ def get_sector_vol_cols(setor, available_cols):
         cols.update(VOL_COLS_EMPRESARIAL)
     cols.update(VOL_COLS_AMBOS)
     return {k: v for k, v in cols.items() if k in available_cols}
+
+
+def build_insights(resumo_df, setor_filter):
+    """Computes strengths/weaknesses for each analyst vs sector peers."""
+    data = []
+    for _, row in resumo_df.sort_values(COL_VOL_TOTAL, ascending=False).iterrows():
+        nome = primeiro_nome(row[COL_NOME])
+        setor = row["Setor"]
+        peers = resumo_df[resumo_df["Setor"] == setor]
+        n_peers = len(peers)
+        if n_peers < 2:
+            continue
+
+        if setor == "RESIDENCIAL":
+            relevant = {**VOL_COLS_RESIDENCIAL, **VOL_COLS_AMBOS}
+        else:
+            relevant = {**VOL_COLS_EMPRESARIAL, **VOL_COLS_AMBOS}
+        vol_keys_r = [k for k in relevant if k in resumo_df.columns]
+
+        strengths, weaknesses = [], []
+        for k in vol_keys_r:
+            val = row.get(k, 0)
+            if pd.isna(val) or val == 0:
+                continue
+            rank = int((peers[k].fillna(0) > val).sum() + 1)
+            if rank == 1:
+                strengths.append(relevant[k])
+            elif rank >= n_peers:
+                weaknesses.append(relevant[k])
+
+        avg_vol = peers[COL_VOL_TOTAL].mean()
+        vol_diff = ((row[COL_VOL_TOTAL] / avg_vol - 1) * 100) if avg_vol > 0 else 0
+        vol_rank = int((peers[COL_VOL_TOTAL].fillna(0) > row[COL_VOL_TOTAL]).sum() + 1)
+        dpa_val = row.get("DPA_Media", None)
+
+        data.append({
+            "nome": nome, "setor": setor, "login": row[COL_LOGIN],
+            "vol_total": row[COL_VOL_TOTAL],
+            "media_diaria": row.get("Media_Diaria", 0),
+            "dias": row.get("Dias_Trabalhados", 0),
+            "vol_diff": vol_diff, "vol_rank": vol_rank,
+            "dpa": dpa_val,
+            "strengths": strengths[:4], "weaknesses": weaknesses[:4],
+            "n_peers": n_peers,
+        })
+    return data
+
+
+def render_insight_cards(insights_list):
+    """Renders insight cards in 2-column layout."""
+    col_l, col_r = st.columns(2)
+    for i, ins in enumerate(insights_list):
+        target = col_l if i % 2 == 0 else col_r
+        vol_color = "#2ECC71" if ins["vol_diff"] >= 0 else "#E74C3C"
+        vol_icon = "▲" if ins["vol_diff"] >= 0 else "▼"
+        border = "#2ECC71" if ins["vol_diff"] >= 10 else ("#E74C3C" if ins["vol_diff"] < -10 else "#5DADE2")
+        dpa_str = f"{ins['dpa']:.1f}%" if pd.notna(ins["dpa"]) else "—"
+
+        str_tags = "".join(f'<span class="tag-green">{s}</span>' for s in ins["strengths"])
+        weak_tags = "".join(f'<span class="tag-red">{w}</span>' for w in ins["weaknesses"])
+        if not str_tags:
+            str_tags = '<span style="opacity:0.35;font-size:0.73rem;">—</span>'
+        if not weak_tags:
+            weak_tags = '<span style="opacity:0.35;font-size:0.73rem;">—</span>'
+
+        with target:
+            st.markdown(f"""<div class="insight-card" style="border-left-color:{border};">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <strong>{ins['nome']}</strong>
+                        <span class="sector-badge">{ins['setor'][:3]}</span>
+                        <span class="rank-pill">#{ins['vol_rank']}/{ins['n_peers']}</span>
+                    </div>
+                    <div style="text-align:right;">
+                        <span style="font-weight:700;">{ins['vol_total']:,.0f}</span>
+                        <span style="color:{vol_color};font-size:0.82rem;margin-left:3px;">{vol_icon}{abs(ins['vol_diff']):.0f}%</span>
+                        <span style="opacity:0.5;font-size:0.78rem;margin-left:6px;">DPA:{dpa_str}</span>
+                    </div>
+                </div>
+                <div style="margin-top:0.4rem;">
+                    <span style="font-size:0.78rem;opacity:0.5;">Forte:</span> {str_tags}
+                    <span style="font-size:0.78rem;opacity:0.5;margin-left:8px;">Atenção:</span> {weak_tags}
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+
+def render_sector_table(resumo_df, sector_name, sector_vol, sector_cmap):
+    """Renders a styled sector detail table with best/worst cards."""
+    df_sec = resumo_df[resumo_df["Setor"] == sector_name].copy()
+    if df_sec.empty:
+        return
+
+    all_vol = {**sector_vol, **VOL_COLS_AMBOS}
+    vol_keys = [k for k in all_vol if k in df_sec.columns]
+
+    css_cls = "sector-res" if sector_name == "RESIDENCIAL" else "sector-emp"
+    icon = "🏠" if sector_name == "RESIDENCIAL" else "🏢"
+    st.markdown(f'<span class="sector-header {css_cls}">{icon} {sector_name}</span>', unsafe_allow_html=True)
+
+    base = [COL_NOME, COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria", "DPA_Media"]
+    base_avail = [c for c in base if c in df_sec.columns]
+    detail = df_sec[base_avail + vol_keys].copy()
+    detail["Nome"] = detail[COL_NOME].apply(primeiro_nome)
+
+    avg_vol = detail[COL_VOL_TOTAL].mean()
+    detail["vs Média"] = ((detail[COL_VOL_TOTAL] / avg_vol - 1) * 100).round(1) if avg_vol > 0 else 0.0
+
+    disp_cols = ["Nome", COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria", "vs Média", "DPA_Media"] + vol_keys
+    disp_cols = [c for c in disp_cols if c in detail.columns]
+    disp = detail[disp_cols].copy()
+    rename = {
+        "Nome": "Analista", COL_VOL_TOTAL: "Vol. Total",
+        "Dias_Trabalhados": "Dias", "Media_Diaria": "Média/Dia",
+        "DPA_Media": "DPA %",
+    }
+    rename.update({k: all_vol[k] for k in vol_keys})
+    disp = disp.rename(columns=rename)
+    disp = disp.sort_values("Vol. Total", ascending=False).reset_index(drop=True)
+    disp.index += 1
+    disp.index.name = "#"
+
+    fmt = {"DPA %": "{:.1f}", "Média/Dia": "{:.1f}", "vs Média": "{:+.1f}"}
+    styled = disp.style.format(fmt, na_rep="—")
+    styled = styled.background_gradient(cmap=sector_cmap, subset=["Vol. Total"])
+    if disp["vs Média"].notna().any():
+        styled = styled.background_gradient(cmap="RdYlGn", subset=["vs Média"], vmin=-50, vmax=50)
+    if "DPA %" in disp.columns and disp["DPA %"].notna().any():
+        styled = styled.background_gradient(cmap="RdYlGn", subset=["DPA %"], vmin=50, vmax=100)
+    for vl in [all_vol[k] for k in vol_keys]:
+        if vl in disp.columns and disp[vl].notna().any():
+            styled = styled.background_gradient(cmap=sector_cmap, subset=[vl])
+
+    st.dataframe(styled, use_container_width=True)
+
+    # Best / Worst cards
+    if len(disp) >= 2:
+        best = disp.iloc[0]
+        worst = disp.iloc[-1]
+        best_dpa_row = None
+        if "DPA %" in disp.columns:
+            dpa_v = disp.dropna(subset=["DPA %"])
+            if not dpa_v.empty:
+                best_dpa_row = dpa_v.sort_values("DPA %", ascending=False).iloc[0]
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown(f"""<div class="perf-card perf-best">
+                <div class="p-title">🏆 Maior Volume</div>
+                <div class="p-name" style="color:#2ECC71;">{best['Analista']}</div>
+                <div class="p-detail">Vol: {best['Vol. Total']:,.0f} · Média: {best['Média/Dia']:.1f}/dia</div>
+            </div>""", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"""<div class="perf-card perf-worst">
+                <div class="p-title">⚠️ Menor Volume</div>
+                <div class="p-name" style="color:#E74C3C;">{worst['Analista']}</div>
+                <div class="p-detail">Vol: {worst['Vol. Total']:,.0f} · Média: {worst['Média/Dia']:.1f}/dia</div>
+            </div>""", unsafe_allow_html=True)
+        with c3:
+            if best_dpa_row is not None:
+                st.markdown(f"""<div class="perf-card perf-dpa">
+                    <div class="p-title">📊 Melhor DPA</div>
+                    <div class="p-name" style="color:#5DADE2;">{best_dpa_row['Analista']}</div>
+                    <div class="p-detail">DPA: {best_dpa_row['DPA %']:.1f}%</div>
+                </div>""", unsafe_allow_html=True)
+
+    st.markdown("")
 
 
 # =====================================================
@@ -222,7 +372,6 @@ with st.container():
             f"Residencial: {len(BASE_EQUIPE[BASE_EQUIPE['Setor']=='RESIDENCIAL'])}"
         )
 
-# Cache uploaded file in session_state to survive reruns
 if uploaded_file is not None:
     st.session_state["uploaded_bytes"] = uploaded_file.getvalue()
     st.session_state["uploaded_name"] = uploaded_file.name
@@ -234,7 +383,6 @@ if "uploaded_bytes" not in st.session_state:
         "Faça upload da planilha **Produtividade COP Rede - Analítico** acima para "
         "visualizar os dados de produtividade da sua equipe."
     )
-
     with st.expander("📋 Analistas monitorados"):
         st.dataframe(BASE_EQUIPE, use_container_width=True, hide_index=True)
     st.stop()
@@ -265,7 +413,6 @@ except Exception as e:
 with st.sidebar:
     st.markdown("### 🔧 Filtros")
 
-    # Meses disponíveis
     meses_disponiveis = sorted(df[COL_ANOMES].dropna().unique().tolist())
     meses_labels = df.drop_duplicates(COL_ANOMES).set_index(COL_ANOMES)[COL_MES].to_dict()
 
@@ -298,10 +445,8 @@ with st.sidebar:
 
 # Aplicar filtros
 df_filtrado = df.copy()
-
 if mes_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado[COL_ANOMES] == mes_selecionado]
-
 if setor_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["Setor"] == setor_selecionado]
 
@@ -312,20 +457,14 @@ if setor_selecionado != "Todos":
 st.markdown('<div class="section-header">📈 Indicadores Gerais da Equipe</div>', unsafe_allow_html=True)
 
 total_vol = df_filtrado[COL_VOL_TOTAL].sum()
-total_dias = df_filtrado.groupby(COL_LOGIN)[COL_DATA].count().sum()
 n_analistas = df_filtrado[COL_LOGIN].nunique()
 media_diaria_equipe = df_filtrado.groupby(COL_LOGIN)[COL_VOL_TOTAL].sum().mean()
-
-# DPA (filtrando outliers)
 dpa_valid = df_filtrado[(df_filtrado[COL_DPA_RESULTADO] >= 0) & (df_filtrado[COL_DPA_RESULTADO] <= 120)]
 dpa_media = dpa_valid[COL_DPA_RESULTADO].mean() if not dpa_valid.empty else None
-
-# Período
 data_min = df_filtrado[COL_DATA].min()
 data_max = df_filtrado[COL_DATA].max()
 
 c1, c2, c3, c4, c5 = st.columns(5)
-
 with c1:
     st.markdown(kpi_card("Volume Total", f"{total_vol:,.0f}", COR_PRIMARIA), unsafe_allow_html=True)
 with c2:
@@ -368,12 +507,10 @@ if analista_selecionado != "Todos":
             dpa_d = f"{dpa_ind:.0f}" if dpa_ind else "—"
             st.markdown(kpi_card("DPA Média", dpa_d, COR_ALERTA, suffix="%"), unsafe_allow_html=True)
 
-        # Gráfico diário do analista
         daily_ind = df_analista.groupby(COL_DATA)[COL_VOL_TOTAL].sum().reset_index()
         daily_ind.columns = ["Data", "Volume"]
         st.bar_chart(daily_ind.set_index("Data"), color=COR_INFO, height=250)
 
-        # Composição de volumes
         vol_breakdown = {}
         for col, label in VOL_COLS.items():
             if col in df_analista.columns:
@@ -389,12 +526,13 @@ if analista_selecionado != "Todos":
 
 
 # =====================================================
-# GRÁFICOS PRINCIPAIS
+# TABS PRINCIPAIS
 # =====================================================
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🏆 Ranking de Produtividade",
+tab1, tab_lid, tab2, tab3, tab4 = st.tabs([
+    "🏆 Ranking",
+    "👑 Líderes",
     "📅 Evolução Diária",
-    "🔍 Composição de Volume",
+    "🔍 Composição",
     "📋 Dados Detalhados",
 ])
 
@@ -403,231 +541,196 @@ with tab1:
     resumo = resumo_geral(df_filtrado)
 
     if not resumo.empty:
+        # Exclude leaders from team ranking
+        resumo_equipe = resumo[~resumo[COL_LOGIN].isin(LIDERES_IDS)].copy()
+
         col_rank1, col_rank2 = st.columns(2)
 
         with col_rank1:
             st.markdown("#### 📦 Ranking por Volume Total")
-            rank_vol = resumo[[COL_LOGIN, COL_NOME, "Setor", COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria"]].copy()
+            rank_vol = resumo_equipe[[COL_LOGIN, COL_NOME, "Setor", COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria"]].copy()
             rank_vol["Nome"] = rank_vol[COL_NOME].apply(primeiro_nome)
             rank_vol = rank_vol.sort_values(COL_VOL_TOTAL, ascending=False).reset_index(drop=True)
             rank_vol.index = rank_vol.index + 1
             rank_vol.index.name = "#"
-
             display_vol = rank_vol[["Nome", "Setor", COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria"]].copy()
             display_vol.columns = ["Analista", "Setor", "Vol. Total", "Dias", "Média/Dia"]
             st.dataframe(
                 display_vol.style.background_gradient(cmap="Blues", subset=["Vol. Total"]),
-                use_container_width=True,
-                height=500,
+                use_container_width=True, height=500,
             )
 
         with col_rank2:
             st.markdown("#### ⏱️ Ranking por DPA (Ocupação)")
-            rank_dpa = resumo[[COL_LOGIN, COL_NOME, "Setor", "DPA_Media"]].copy()
+            rank_dpa = resumo_equipe[[COL_LOGIN, COL_NOME, "Setor", "DPA_Media"]].copy()
             rank_dpa["Nome"] = rank_dpa[COL_NOME].apply(primeiro_nome)
             rank_dpa = rank_dpa.dropna(subset=["DPA_Media"])
             rank_dpa = rank_dpa.sort_values("DPA_Media", ascending=False).reset_index(drop=True)
             rank_dpa.index = rank_dpa.index + 1
             rank_dpa.index.name = "#"
-
             display_dpa = rank_dpa[["Nome", "Setor", "DPA_Media"]].copy()
             display_dpa.columns = ["Analista", "Setor", "DPA %"]
             st.dataframe(
                 display_dpa.style
                     .format({"DPA %": "{:.1f}"})
                     .background_gradient(cmap="RdYlGn", subset=["DPA %"], vmin=50, vmax=100),
-                use_container_width=True,
-                height=500,
+                use_container_width=True, height=500,
             )
 
-        # Ranking por média diária
+        # Bar chart
         st.markdown("#### 📊 Ranking por Média Diária")
-        rank_media = resumo[[COL_LOGIN, COL_NOME, "Setor", "Media_Diaria", "Dias_Trabalhados", COL_VOL_TOTAL]].copy()
+        rank_media = resumo_equipe[[COL_NOME, "Media_Diaria"]].copy()
         rank_media["Nome"] = rank_media[COL_NOME].apply(primeiro_nome)
-        rank_media = rank_media.sort_values("Media_Diaria", ascending=False).reset_index(drop=True)
-        rank_media.index = rank_media.index + 1
-        rank_media.index.name = "#"
-
-        # Gráfico de barras horizontal
         chart_data = rank_media[["Nome", "Media_Diaria"]].set_index("Nome").sort_values("Media_Diaria")
         st.bar_chart(chart_data, horizontal=True, color=COR_PRIMARIA, height=500)
 
-        # ================================================
-        # ANÁLISE DETALHADA POR SETOR
-        # ================================================
+        # ============ SECTOR DETAIL ============
         st.markdown("---")
         st.markdown("#### 📋 Análise Detalhada por Setor")
 
-        sectors_to_show = []
         if setor_selecionado in ("Todos", "RESIDENCIAL"):
-            sectors_to_show.append(("RESIDENCIAL", VOL_COLS_RESIDENCIAL, "🏠", "Blues"))
+            render_sector_table(resumo_equipe, "RESIDENCIAL", VOL_COLS_RESIDENCIAL, "Blues")
         if setor_selecionado in ("Todos", "EMPRESARIAL"):
-            sectors_to_show.append(("EMPRESARIAL", VOL_COLS_EMPRESARIAL, "🏢", "Oranges"))
+            render_sector_table(resumo_equipe, "EMPRESARIAL", VOL_COLS_EMPRESARIAL, "Oranges")
 
-        for sector_name, sector_specific_vol, sector_icon, sector_cmap in sectors_to_show:
-            df_sector = resumo[resumo["Setor"] == sector_name].copy()
-            if df_sector.empty:
-                continue
-
-            all_vol = {**sector_specific_vol, **VOL_COLS_AMBOS}
-            vol_keys = [k for k in all_vol if k in df_sector.columns]
-
-            st.markdown(f"##### {sector_icon} {sector_name}")
-
-            # Build table with comparison metrics
-            base = [COL_NOME, COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria", "DPA_Media"]
-            base_avail = [c for c in base if c in df_sector.columns]
-            detail = df_sector[base_avail + vol_keys].copy()
-            detail["Nome"] = detail[COL_NOME].apply(primeiro_nome)
-
-            avg_vol = detail[COL_VOL_TOTAL].mean()
-            detail["vs Média"] = ((detail[COL_VOL_TOTAL] / avg_vol - 1) * 100).round(1) if avg_vol > 0 else 0.0
-
-            disp_cols = ["Nome", COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria", "vs Média", "DPA_Media"] + vol_keys
-            disp_cols = [c for c in disp_cols if c in detail.columns]
-            disp = detail[disp_cols].copy()
-
-            rename = {
-                "Nome": "Analista", COL_VOL_TOTAL: "Vol. Total",
-                "Dias_Trabalhados": "Dias", "Media_Diaria": "Média/Dia",
-                "DPA_Media": "DPA %",
-            }
-            rename.update({k: all_vol[k] for k in vol_keys})
-            disp = disp.rename(columns=rename)
-            disp = disp.sort_values("Vol. Total", ascending=False).reset_index(drop=True)
-            disp.index += 1
-            disp.index.name = "#"
-
-            # Style the table
-            fmt = {"DPA %": "{:.1f}", "Média/Dia": "{:.1f}", "vs Média": "{:+.1f}"}
-            styled = disp.style.format(fmt, na_rep="—")
-            styled = styled.background_gradient(cmap=sector_cmap, subset=["Vol. Total"])
-            if disp["vs Média"].notna().any():
-                styled = styled.background_gradient(cmap="RdYlGn", subset=["vs Média"], vmin=-50, vmax=50)
-            if "DPA %" in disp.columns and disp["DPA %"].notna().any():
-                styled = styled.background_gradient(cmap="RdYlGn", subset=["DPA %"], vmin=50, vmax=100)
-            for vl in [all_vol[k] for k in vol_keys]:
-                if vl in disp.columns and disp[vl].notna().any():
-                    styled = styled.background_gradient(cmap=sector_cmap, subset=[vl])
-
-            st.dataframe(styled, use_container_width=True)
-
-            # Best / Worst performer cards
-            if len(disp) >= 2:
-                best = disp.iloc[0]
-                worst = disp.iloc[-1]
-                best_dpa_row = None
-                if "DPA %" in disp.columns:
-                    dpa_valid = disp.dropna(subset=["DPA %"])
-                    if not dpa_valid.empty:
-                        best_dpa_row = dpa_valid.sort_values("DPA %", ascending=False).iloc[0]
-
-                c_best, c_worst, c_dpa = st.columns(3)
-                with c_best:
-                    st.markdown(f"""<div class="perf-card perf-best">
-                        <strong>🏆 Maior Volume</strong><br>
-                        <span style="font-size:1.15rem;font-weight:700;color:#1e8449;">{best['Analista']}</span><br>
-                        <span style="font-size:0.82rem;">Vol: {best['Vol. Total']:,.0f} · Média: {best['Média/Dia']:.1f}/dia</span>
-                    </div>""", unsafe_allow_html=True)
-                with c_worst:
-                    st.markdown(f"""<div class="perf-card perf-worst">
-                        <strong>⚠️ Menor Volume</strong><br>
-                        <span style="font-size:1.15rem;font-weight:700;color:#922b21;">{worst['Analista']}</span><br>
-                        <span style="font-size:0.82rem;">Vol: {worst['Vol. Total']:,.0f} · Média: {worst['Média/Dia']:.1f}/dia</span>
-                    </div>""", unsafe_allow_html=True)
-                with c_dpa:
-                    if best_dpa_row is not None:
-                        st.markdown(f"""<div class="perf-card perf-dpa">
-                            <strong>📊 Melhor DPA</strong><br>
-                            <span style="font-size:1.15rem;font-weight:700;color:#1b4f72;">{best_dpa_row['Analista']}</span><br>
-                            <span style="font-size:0.82rem;">DPA: {best_dpa_row['DPA %']:.1f}%</span>
-                        </div>""", unsafe_allow_html=True)
-
-            st.markdown("")
-
-        # ================================================
-        # INSIGHTS POR ANALISTA
-        # ================================================
+        # ============ INSIGHTS ============
         st.markdown("---")
         st.markdown("#### 💡 Insights — Pontos Fortes e Oportunidades")
+        insights = build_insights(resumo_equipe, setor_selecionado)
+        render_insight_cards(insights)
 
-        insights_data = []
-        for _, row in resumo.sort_values(COL_VOL_TOTAL, ascending=False).iterrows():
-            nome = primeiro_nome(row[COL_NOME])
-            setor = row["Setor"]
-            peers = resumo[resumo["Setor"] == setor]
-            n_peers = len(peers)
-            if n_peers < 2:
-                continue
 
-            if setor == "RESIDENCIAL":
-                relevant = {**VOL_COLS_RESIDENCIAL, **VOL_COLS_AMBOS}
-            else:
-                relevant = {**VOL_COLS_EMPRESARIAL, **VOL_COLS_AMBOS}
-            vol_keys_r = [k for k in relevant if k in resumo.columns]
+# ---- TAB LÍDERES ----
+with tab_lid:
+    resumo_full = resumo_geral(df_filtrado)
+    resumo_lid = resumo_full[resumo_full[COL_LOGIN].isin(LIDERES_IDS)].copy()
+    resumo_equipe_all = resumo_full[~resumo_full[COL_LOGIN].isin(LIDERES_IDS)].copy()
 
-            strengths = []
-            weaknesses = []
-            for k in vol_keys_r:
-                val = row.get(k, 0)
-                if pd.isna(val) or val == 0:
-                    continue
-                rank = int((peers[k].fillna(0) > val).sum() + 1)
-                if rank == 1:
-                    strengths.append(relevant[k])
-                elif rank >= n_peers:
-                    weaknesses.append(relevant[k])
+    if not resumo_lid.empty:
+        st.markdown("#### 👑 Visão dos Líderes")
+        st.caption("Comparação entre os líderes e as médias das suas equipes.")
 
-            avg_vol = peers[COL_VOL_TOTAL].mean()
-            vol_diff = ((row[COL_VOL_TOTAL] / avg_vol - 1) * 100) if avg_vol > 0 else 0
-            vol_rank = int((peers[COL_VOL_TOTAL].fillna(0) > row[COL_VOL_TOTAL]).sum() + 1)
+        # Leader cards
+        cols_lid = st.columns(len(resumo_lid))
+        for idx, (_, lrow) in enumerate(resumo_lid.sort_values(COL_VOL_TOTAL, ascending=False).iterrows()):
+            nome_l = primeiro_nome(lrow[COL_NOME])
+            setor_l = lrow["Setor"]
+            vol_l = lrow[COL_VOL_TOTAL]
+            media_l = lrow.get("Media_Diaria", 0)
+            dias_l = lrow.get("Dias_Trabalhados", 0)
+            dpa_l = lrow.get("DPA_Media", None)
+            dpa_l_str = f"{dpa_l:.1f}%" if pd.notna(dpa_l) else "—"
 
-            dpa_val = row.get("DPA_Media", None)
+            # Compare vs team average
+            team = resumo_equipe_all[resumo_equipe_all["Setor"] == setor_l]
+            team_avg_vol = team[COL_VOL_TOTAL].mean() if not team.empty else 0
+            team_avg_media = team["Media_Diaria"].mean() if not team.empty else 0
+            diff_vol = ((vol_l / team_avg_vol - 1) * 100) if team_avg_vol > 0 else 0
+            diff_media = ((media_l / team_avg_media - 1) * 100) if team_avg_media > 0 else 0
 
-            insights_data.append({
-                "nome": nome, "setor": setor,
-                "vol_total": row[COL_VOL_TOTAL],
-                "vol_diff": vol_diff, "vol_rank": vol_rank,
-                "dpa": dpa_val,
-                "strengths": strengths[:4],
-                "weaknesses": weaknesses[:4],
-                "n_peers": n_peers,
-            })
+            badge_setor = "RES" if setor_l == "RESIDENCIAL" else "EMP"
+            diff_vol_color = "#2ECC71" if diff_vol >= 0 else "#E74C3C"
+            diff_vol_icon = "▲" if diff_vol >= 0 else "▼"
 
-        col_left, col_right = st.columns(2)
-        for i, ins in enumerate(insights_data):
-            target_col = col_left if i % 2 == 0 else col_right
-            vol_color = "#27AE60" if ins["vol_diff"] >= 0 else "#E74C3C"
-            vol_icon = "▲" if ins["vol_diff"] >= 0 else "▼"
-            border = "#27AE60" if ins["vol_diff"] >= 10 else ("#E74C3C" if ins["vol_diff"] < -10 else "#2980B9")
-            dpa_str = f"{ins['dpa']:.1f}%" if pd.notna(ins["dpa"]) else "—"
-
-            str_tags = "".join(f'<span class="tag-green">{s}</span>' for s in ins["strengths"])
-            weak_tags = "".join(f'<span class="tag-red">{w}</span>' for w in ins["weaknesses"])
-            if not str_tags:
-                str_tags = '<span style="color:#aaa;font-size:0.75rem;">—</span>'
-            if not weak_tags:
-                weak_tags = '<span style="color:#aaa;font-size:0.75rem;">—</span>'
-
-            with target_col:
-                st.markdown(f"""<div class="insight-card" style="border-left-color:{border};">
+            with cols_lid[idx]:
+                st.markdown(f"""<div class="leader-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <div>
-                            <strong>{ins['nome']}</strong>
-                            <span class="sector-badge">{ins['setor'][:3]}</span>
-                            <span class="rank-pill">#{ins['vol_rank']}/{ins['n_peers']}</span>
-                        </div>
-                        <div style="text-align:right;">
-                            <span style="font-weight:700;">{ins['vol_total']:,.0f}</span>
-                            <span style="color:{vol_color};font-size:0.82rem;margin-left:3px;">{vol_icon}{abs(ins['vol_diff']):.0f}%</span>
-                            <span style="color:#7f8c8d;font-size:0.78rem;margin-left:6px;">DPA:{dpa_str}</span>
+                            <span class="l-name">{nome_l}</span>
+                            <span class="l-badge">{badge_setor}</span>
                         </div>
                     </div>
-                    <div style="margin-top:0.4rem;">
-                        <span style="font-size:0.78rem;color:#555;">Forte:</span> {str_tags}
-                        <span style="font-size:0.78rem;color:#555;margin-left:8px;">Atenção:</span> {weak_tags}
+                    <div class="l-vol">{vol_l:,.0f}</div>
+                    <div class="l-stat">Média: {media_l:.1f}/dia · Dias: {dias_l:.0f} · DPA: {dpa_l_str}</div>
+                    <div class="l-stat" style="margin-top:0.2rem;">
+                        vs Equipe: <span style="color:{diff_vol_color};font-weight:600;">{diff_vol_icon}{abs(diff_vol):.0f}% vol</span>
+                        · <span style="color:{diff_vol_color};font-weight:600;">{diff_vol_icon}{abs(diff_media):.0f}% média</span>
                     </div>
                 </div>""", unsafe_allow_html=True)
+
+        # Leaders detailed table
+        st.markdown("---")
+        st.markdown("#### 📊 Comparação Detalhada")
+
+        sector_vol_lid = get_sector_vol_cols(setor_selecionado, resumo_lid.columns)
+        vol_keys_lid = list(sector_vol_lid.keys())
+        base_cols_lid = [COL_NOME, "Setor", COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria", "DPA_Media"]
+        avail_lid = [c for c in base_cols_lid if c in resumo_lid.columns]
+        det_lid = resumo_lid[avail_lid + vol_keys_lid].copy()
+        det_lid[COL_NOME] = det_lid[COL_NOME].apply(primeiro_nome)
+        rename_lid = {
+            COL_NOME: "Líder", "Setor": "Setor", COL_VOL_TOTAL: "Vol. Total",
+            "Dias_Trabalhados": "Dias", "Media_Diaria": "Média/Dia", "DPA_Media": "DPA %",
+        }
+        rename_lid.update(sector_vol_lid)
+        det_lid = det_lid.rename(columns=rename_lid)
+        det_lid = det_lid.sort_values("Vol. Total", ascending=False).reset_index(drop=True)
+        det_lid.index += 1
+        det_lid.index.name = "#"
+
+        fmt_lid = {"DPA %": "{:.1f}", "Média/Dia": "{:.1f}"}
+        styled_lid = det_lid.style.format(fmt_lid, na_rep="—")
+        styled_lid = styled_lid.background_gradient(cmap="YlOrBr", subset=["Vol. Total"])
+        if "DPA %" in det_lid.columns and det_lid["DPA %"].notna().any():
+            styled_lid = styled_lid.background_gradient(cmap="RdYlGn", subset=["DPA %"], vmin=50, vmax=100)
+        vol_lbl_lid = [sector_vol_lid[k] for k in vol_keys_lid if sector_vol_lid[k] in det_lid.columns]
+        for vl in vol_lbl_lid:
+            if det_lid[vl].notna().any():
+                styled_lid = styled_lid.background_gradient(cmap="YlOrBr", subset=[vl])
+        st.dataframe(styled_lid, use_container_width=True)
+
+        # Leaders vs team comparison
+        st.markdown("---")
+        st.markdown("#### 📈 Líderes vs Média da Equipe")
+
+        for setor_comp in ["RESIDENCIAL", "EMPRESARIAL"]:
+            lids_setor = resumo_lid[resumo_lid["Setor"] == setor_comp]
+            team_setor = resumo_equipe_all[resumo_equipe_all["Setor"] == setor_comp]
+            if lids_setor.empty:
+                continue
+
+            css_s = "sector-res" if setor_comp == "RESIDENCIAL" else "sector-emp"
+            icon_s = "🏠" if setor_comp == "RESIDENCIAL" else "🏢"
+            st.markdown(f'<span class="sector-header {css_s}">{icon_s} {setor_comp}</span>', unsafe_allow_html=True)
+
+            team_avg_vol_s = team_setor[COL_VOL_TOTAL].mean() if not team_setor.empty else 0
+            team_avg_media_s = team_setor["Media_Diaria"].mean() if not team_setor.empty else 0
+            team_avg_dpa_s = team_setor["DPA_Media"].mean() if not team_setor.empty and team_setor["DPA_Media"].notna().any() else None
+
+            rows = []
+            for _, lr in lids_setor.iterrows():
+                nome_r = primeiro_nome(lr[COL_NOME])
+                rows.append({
+                    "Analista": nome_r,
+                    "Vol. Total": lr[COL_VOL_TOTAL],
+                    "Média/Dia": lr.get("Media_Diaria", 0),
+                    "DPA %": lr.get("DPA_Media", None),
+                })
+            # Add team average row
+            rows.append({
+                "Analista": "📊 MÉDIA EQUIPE",
+                "Vol. Total": team_avg_vol_s,
+                "Média/Dia": team_avg_media_s,
+                "DPA %": team_avg_dpa_s,
+            })
+            comp_df = pd.DataFrame(rows)
+            comp_df = comp_df.set_index("Analista")
+            st.dataframe(
+                comp_df.style
+                    .format({"DPA %": "{:.1f}", "Média/Dia": "{:.1f}", "Vol. Total": "{:,.0f}"}, na_rep="—"),
+                use_container_width=True,
+            )
+            st.markdown("")
+
+        # Insights for leaders
+        st.markdown("---")
+        st.markdown("#### 💡 Insights dos Líderes")
+        lid_insights = build_insights(resumo_full, setor_selecionado)
+        lid_insights = [i for i in lid_insights if i["login"] in LIDERES_IDS]
+        render_insight_cards(lid_insights)
+
+    else:
+        st.info("Nenhum líder encontrado nos dados filtrados.")
 
 
 # ---- TAB 2: EVOLUÇÃO DIÁRIA ----
@@ -647,7 +750,6 @@ with tab2:
         chart_an = daily[[COL_DATA, "Analistas"]].set_index(COL_DATA)
         st.bar_chart(chart_an, color=COR_ALERTA, height=250)
 
-    # Comparação mensal (se houver mais de 1 mês)
     meses_unicos = df_filtrado[COL_MES].dropna().unique()
     if len(meses_unicos) > 1 and mes_selecionado == "Todos":
         st.markdown("---")
@@ -669,27 +771,22 @@ with tab3:
 
     if not comp.empty:
         st.markdown("#### Distribuição por Tipo de Atividade")
-
         col_pie, col_bar = st.columns([1, 1])
 
         with col_pie:
-            # Top activities
             total = comp["Volume"].sum()
             comp["Percentual"] = (comp["Volume"] / total * 100).round(1)
-            comp["Label"] = comp["Atividade"] + " (" + comp["Percentual"].astype(str) + "%)"
             st.dataframe(
                 comp[["Atividade", "Volume", "Percentual"]].style.background_gradient(
                     cmap="YlOrRd", subset=["Volume"]
                 ),
-                use_container_width=True,
-                hide_index=True,
+                use_container_width=True, hide_index=True,
             )
 
         with col_bar:
             chart_comp = comp[["Atividade", "Volume"]].set_index("Atividade").sort_values("Volume")
             st.bar_chart(chart_comp, horizontal=True, color=COR_PRIMARIA, height=450)
 
-    # Composição por setor
     if setor_selecionado == "Todos":
         st.markdown("#### Comparação por Setor")
         for setor in ["EMPRESARIAL", "RESIDENCIAL"]:
@@ -702,9 +799,7 @@ with tab3:
                     st.markdown(f"**{setor}** — Volume Total: {total_s:,.0f}")
                     st.dataframe(
                         comp_setor[["Atividade", "Volume", "Percentual"]],
-                        use_container_width=True,
-                        hide_index=True,
-                        height=200,
+                        use_container_width=True, hide_index=True, height=200,
                     )
 
 
@@ -714,11 +809,9 @@ with tab4:
     resumo_det = resumo_geral(df_filtrado)
 
     if not resumo_det.empty:
-        # Base columns
         display_cols = [COL_NOME, "Setor", "Dias_Trabalhados", COL_VOL_TOTAL, "Media_Diaria", "DPA_Media"]
         display_labels = ["Analista", "Setor", "Dias", "Vol. Total", "Média/Dia", "DPA %"]
 
-        # Add sector-specific volume columns
         sector_vol = get_sector_vol_cols(setor_selecionado, resumo_det.columns)
         vol_keys = list(sector_vol.keys())
         vol_labels = list(sector_vol.values())
@@ -749,17 +842,13 @@ with tab4:
 
     st.dataframe(
         df_filtrado[cols_existing].sort_values([COL_NOME, COL_DATA]),
-        use_container_width=True,
-        height=500,
+        use_container_width=True, height=500,
     )
 
-    # Download
     csv = df_filtrado[cols_existing].to_csv(index=False).encode("utf-8")
     st.download_button(
         "📥 Baixar dados filtrados (CSV)",
-        csv,
-        "produtividade_equipe.csv",
-        "text/csv",
+        csv, "produtividade_equipe.csv", "text/csv",
     )
 
 
@@ -769,7 +858,7 @@ with tab4:
 st.markdown("---")
 st.caption(
     f"Dashboard de Produtividade COP Rede · "
-    f"{len(df_filtrado)} registros carregados · "
+    f"{len(df_filtrado)} registros · "
     f"{n_analistas} analistas · "
     f"Dados de {data_min.strftime('%d/%m/%Y') if pd.notna(data_min) else '?'} "
     f"a {data_max.strftime('%d/%m/%Y') if pd.notna(data_max) else '?'}"
