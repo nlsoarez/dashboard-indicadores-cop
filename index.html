@@ -4,16 +4,37 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard Indicadores COP Rede - Equipe Nelson Soares</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',Tahoma,sans-serif;background:#0f1117;color:#e0e0e0;min-height:100vh}
+body{font-family:"Segoe UI",Tahoma,sans-serif;background:#0f1117;color:#e0e0e0;min-height:100vh}
 .hdr{background:linear-gradient(135deg,#1a1a2e,#16213e);padding:18px 30px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #e50914}
 .hdr h1{font-size:1.3em;color:#fff}
 .hdr .inf{font-size:.8em;opacity:.7;color:#aaa}
 .ctn{max-width:1500px;margin:0 auto;padding:15px}
-.period-info{background:#16213e;padding:12px 20px;border-radius:8px;margin-bottom:15px;display:flex;justify-content:space-between;align-items:center;border:1px solid #2a2a4a}
-.period-info span{font-size:.85em;color:#aaa}
-.period-info strong{color:#e50914}
+.upload-section{background:#16213e;border-radius:12px;padding:25px;border:1px solid #2a2a4a;margin:15px 0}
+.upload-section h2{color:#e50914;margin-bottom:15px;font-size:1.2em}
+.upload-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:15px}
+.upload-card{background:#1a1a2e;border:2px dashed #2a2a4a;border-radius:10px;padding:20px;text-align:center;transition:all .3s;cursor:pointer;position:relative}
+.upload-card:hover{border-color:#e50914;background:#1e1e3a}
+.upload-card.loaded{border-color:#00c853;border-style:solid;background:rgba(0,200,83,.05)}
+.upload-card .icon{font-size:2em;margin-bottom:8px}
+.upload-card .name{font-size:.9em;font-weight:600;color:#fff;margin-bottom:4px}
+.upload-card .desc{font-size:.75em;color:#888}
+.upload-card .status{font-size:.72em;margin-top:8px;padding:3px 10px;border-radius:10px;display:inline-block}
+.upload-card .status.pending{background:rgba(255,193,7,.15);color:#ffc107}
+.upload-card .status.ok{background:rgba(0,200,83,.15);color:#00c853}
+.upload-card input[type=file]{display:none}
+.btn-process{background:#e50914;color:#fff;border:none;padding:12px 30px;border-radius:8px;font-size:1em;cursor:pointer;margin-top:20px;font-weight:600;transition:all .3s;display:inline-flex;align-items:center;gap:8px}
+.btn-process:hover{background:#ff1a25;transform:translateY(-2px)}
+.btn-process:disabled{background:#444;cursor:not-allowed;transform:none}
+.btn-clear{background:transparent;color:#aaa;border:1px solid #2a2a4a;padding:10px 20px;border-radius:8px;font-size:.85em;cursor:pointer;margin-top:20px;margin-left:10px;transition:all .3s}
+.btn-clear:hover{border-color:#e50914;color:#e50914}
+.progress-bar{height:4px;background:#2a2a4a;border-radius:2px;margin-top:15px;overflow:hidden;display:none}
+.progress-bar.active{display:block}
+.progress-bar .fill{height:100%;background:linear-gradient(90deg,#e50914,#ff6b6b);border-radius:2px;transition:width .3s;width:0}
+.results{display:none}
+.results.active{display:block}
 .tabs{display:flex;gap:5px;margin:12px 0;flex-wrap:wrap}
 .tab{padding:8px 18px;background:#16213e;border:1px solid #2a2a4a;border-radius:6px 6px 0 0;cursor:pointer;font-size:.82em;color:#aaa;transition:all .2s}
 .tab.act{background:#e50914;color:#fff;border-color:#e50914}
@@ -40,29 +61,117 @@ tr:hover td{background:rgba(229,9,20,.05)}
 .badge-gr{background:rgba(0,200,83,.15);color:#00c853}
 .badge-yl{background:rgba(255,193,7,.15);color:#ffc107}
 .badge-rd{background:rgba(255,82,82,.15);color:#ff5252}
-.legend{display:flex;gap:15px;margin:10px 0;font-size:.75em;flex-wrap:wrap}
-.legend span{display:flex;align-items:center;gap:4px}
-.legend .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
 .note{background:#1a1a2e;border-left:3px solid #e50914;padding:10px 15px;margin:10px 0;font-size:.78em;color:#999;border-radius:0 6px 6px 0}
 .tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid #2a2a4a}
-@media(max-width:768px){.kg{grid-template-columns:1fr 1fr}.hdr{flex-direction:column;gap:5px}}
+.period-info{background:#16213e;padding:12px 20px;border-radius:8px;margin-bottom:15px;display:flex;justify-content:space-between;align-items:center;border:1px solid #2a2a4a;flex-wrap:wrap;gap:10px}
+.period-info span{font-size:.85em;color:#aaa}
+.period-info strong{color:#e50914}
+.upload-info{background:#1a1a2e;border-radius:8px;padding:15px;margin:10px 0;font-size:.8em;color:#888;line-height:1.6}
+.upload-info strong{color:#e50914}
+.file-loaded-name{font-size:.7em;color:#00c853;margin-top:5px;word-break:break-all}
+@media(max-width:768px){.kg{grid-template-columns:1fr 1fr}.hdr{flex-direction:column;gap:5px}.upload-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="hdr">
 <div><h1>⚡ Dashboard Indicadores COP Rede</h1><div class="inf">Equipe Nelson Soares | COP REDE RJ | Leste - Rio e ES</div></div>
-<div style="text-align:right"><div class="inf">📅 Período: Fevereiro/2026</div><div class="inf">Atualizado: 12/02/2026</div></div>
+<div style="text-align:right"><div class="inf" id="periodo-display">📅 Aguardando upload dos dados...</div><div class="inf" id="update-display"></div></div>
 </div>
+
 <div class="ctn">
-<div class="period-info">
-<span>📊 <strong>Mês de Referência:</strong> Fevereiro/2026 (parcial até 12/02)</span>
-<span>🔄 Próxima atualização semanal: 19/02/2026</span>
+<div class="upload-section" id="upload-area">
+<h2>📤 Upload das Planilhas de Indicadores</h2>
+<div class="upload-info">
+Faça o upload das <strong>7 planilhas</strong> abaixo para processar os indicadores. As planilhas devem ser arquivos <strong>.xlsx</strong> ou <strong>.xls</strong>.<br>
+Após carregar todas as planilhas necessárias, clique em <strong>"Processar Dados"</strong> para gerar o dashboard.
 </div>
-<div class="tabs">
-<div class="tab act" onclick="showPanel('cons')">Consolidado</div>
-<div class="tab" onclick="showPanel('emp')">Empresarial (13)</div>
-<div class="tab" onclick="showPanel('res')">Residencial (8)</div>
-<div class="tab" onclick="showPanel('metas')">Metas & Glossário</div>
+
+<div class="upload-grid">
+<div class="upload-card" onclick="document.getElementById('file-dpa').click()">
+<div class="icon">📊</div>
+<div class="name">1. DPA - Ocupação</div>
+<div class="desc">Planilha DPA Verint com dados de ocupação produtiva</div>
+<div class="status pending" id="status-dpa">Aguardando</div>
+<div class="file-loaded-name" id="fname-dpa"></div>
+<input type="file" id="file-dpa" accept=".xlsx,.xls,.csv" onchange="handleFile(this,'dpa')">
+</div>
+
+<div class="upload-card" onclick="document.getElementById('file-chat').click()">
+<div class="icon">💬</div>
+<div class="name">2. Chat TOA</div>
+<div class="desc">Planilha de interação Chat TOA (tempo de resposta 10min)</div>
+<div class="status pending" id="status-chat">Aguardando</div>
+<div class="file-loaded-name" id="fname-chat"></div>
+<input type="file" id="file-chat" accept=".xlsx,.xls,.csv" onchange="handleFile(this,'chat')">
+</div>
+
+<div class="upload-card" onclick="document.getElementById('file-etit-ral').click()">
+<div class="icon">⏱️</div>
+<div class="name">3. ETIT por Evento RAL</div>
+<div class="desc">Planilha ETIT tarefas direcionadas em até 30min (RAL)</div>
+<div class="status pending" id="status-etit-ral">Aguardando</div>
+<div class="file-loaded-name" id="fname-etit-ral"></div>
+<input type="file" id="file-etit-ral" accept=".xlsx,.xls,.csv" onchange="handleFile(this,'etit-ral')">
+</div>
+
+<div class="upload-card" onclick="document.getElementById('file-etit-rec').click()">
+<div class="icon">🔄</div>
+<div class="name">4. ETIT por Evento REC</div>
+<div class="desc">Planilha ETIT tarefas direcionadas em até 30min (REC)</div>
+<div class="status pending" id="status-etit-rec">Aguardando</div>
+<div class="file-loaded-name" id="fname-etit-rec"></div>
+<input type="file" id="file-etit-rec" accept=".xlsx,.xls,.csv" onchange="handleFile(this,'etit-rec')">
+</div>
+
+<div class="upload-card" onclick="document.getElementById('file-outage-gpon').click()">
+<div class="icon">📡</div>
+<div class="name">5. ETIT Outage Sem Sinal GPON</div>
+<div class="desc">Planilha de outages GPON - Volume DP / Volume Total</div>
+<div class="status pending" id="status-outage-gpon">Aguardando</div>
+<div class="file-loaded-name" id="fname-outage-gpon"></div>
+<input type="file" id="file-outage-gpon" accept=".xlsx,.xls,.csv" onchange="handleFile(this,'outage-gpon')">
+</div>
+
+<div class="upload-card" onclick="document.getElementById('file-log-reprog').click()">
+<div class="icon">📋</div>
+<div class="name">6. Log Outage Reprog. GPON</div>
+<div class="desc">Planilha de outages reprogramados sem sinal GPON</div>
+<div class="status pending" id="status-log-reprog">Aguardando</div>
+<div class="file-loaded-name" id="fname-log-reprog"></div>
+<input type="file" id="file-log-reprog" accept=".xlsx,.xls,.csv" onchange="handleFile(this,'log-reprog')">
+</div>
+
+<div class="upload-card" onclick="document.getElementById('file-analitico').click()">
+<div class="icon">📈</div>
+<div class="name">7. Analítico Indicadores TOA</div>
+<div class="desc">Planilha analítica completa com dados individuais por analista</div>
+<div class="status pending" id="status-analitico">Aguardando</div>
+<div class="file-loaded-name" id="fname-analitico"></div>
+<input type="file" id="file-analitico" accept=".xlsx,.xls,.csv" onchange="handleFile(this,'analitico')">
+</div>
+</div>
+
+<div class="progress-bar" id="progress"><div class="fill" id="progress-fill"></div></div>
+
+<div style="margin-top:20px;display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+<button class="btn-process" id="btn-process" onclick="processarDados()" disabled>🚀 Processar Dados</button>
+<button class="btn-clear" onclick="limparTudo()">🗑️ Limpar Tudo</button>
+<span id="upload-count" style="font-size:.8em;color:#888;margin-left:10px">0 de 7 planilhas carregadas</span>
+</div>
+</div>
+
+<div class="results" id="results-area">
+<div class="period-info">
+<span>📊 <strong>Mês de Referência:</strong> <span id="ref-month">-</span></span>
+<span>🔄 Dados processados em: <span id="process-date">-</span></span>
+<span><button class="btn-clear" onclick="voltarUpload()">📤 Novo Upload</button></span>
+</div>
+
+<div class="tabs" id="main-tabs">
+<div class="tab act" onclick="showPanel('cons',this)">Consolidado</div>
+<div class="tab" onclick="showPanel('emp',this)">Empresarial (13)</div>
+<div class="tab" onclick="showPanel('res',this)">Residencial (8)</div>
+<div class="tab" onclick="showPanel('metas',this)">Metas & Glossário</div>
 </div>
 
 <div id="cons" class="panel act"></div>
@@ -70,239 +179,486 @@ tr:hover td{background:rgba(229,9,20,.05)}
 <div id="res" class="panel"></div>
 <div id="metas" class="panel"></div>
 </div>
-
+</div>
 <script>
+// ============================================
+// CONFIGURACOES E CONSTANTES
+// ============================================
 const METAS = {
-'DPA - Ocupação': {meta:90,dir:'up'},
-'Chat TOA': {meta:75,dir:'up'},
-'ETIT por Evento RAL': {meta:90,dir:'up'},
-'ETIT por Evento REC': {meta:90,dir:'up'},
-'ETIT Outage Sem Sinal (GPON)': {meta:90,dir:'up'},
-'Log Outage Reprog. GPON': {meta:10,dir:'down'},
-'ETIT Outage Res. Sem Sinal': {meta:90,dir:'up'},
-'ETIT Outage Res. Degradação': {meta:90,dir:'up'},
-'Tempo Valid. Formulário': {meta:80,dir:'down'},
-'Tarefas Canceladas': {meta:15,dir:'up'},
-'Fechamento TOA x SIR': {meta:80,dir:'up'}
+  'DPA - Ocupação': {meta:90,dir:'up'},
+  'Chat TOA': {meta:75,dir:'up'},
+  'ETIT por Evento RAL': {meta:90,dir:'up'},
+  'ETIT por Evento REC': {meta:90,dir:'up'},
+  'ETIT Outage Sem Sinal (GPON)': {meta:90,dir:'up'},
+  'Log Outage Reprog. GPON': {meta:10,dir:'down'},
+  'ETIT Outage Res. Sem Sinal': {meta:90,dir:'up'},
+  'ETIT Outage Res. Degradação': {meta:90,dir:'up'},
+  'Tempo Valid. Formulário': {meta:80,dir:'down'},
+  'Tarefas Canceladas': {meta:15,dir:'up'},
+  'Fechamento TOA x SIR': {meta:80,dir:'up'}
 };
 
 const EMPRESARIAL = [
-{login:'N6088107',nome:'LEANDRO GONÇALVES DE CARVALHO'},
-{login:'N5619600',nome:'BRUNO COSTA BUCARD'},
-{login:'N0189105',nome:'IGOR MARCELINO DE MARINS'},
-{login:'N5737414',nome:'SANDRO DA SILVA CARVALHO'},
-{login:'N5713690',nome:'GABRIELA TAVARES DA SILVA'},
-{login:'N5802257',nome:'MAGNO FERRAREZ DE MORAIS'},
-{login:'F201714',nome:'FERNANDA MESQUITA DE FREITAS'},
-{login:'N6173055',nome:'JEFFERSON LUIS GONÇALVES COITINHO'},
-{login:'N0125317',nome:'ROBERTO SILVA DO NASCIMENTO'},
-{login:'F218860',nome:'ALDENES MARQUES IDALINO DA SILVA'},
-{login:'N5819183',nome:'RODRIGO PIRES BERNARDINO'},
-{login:'N5926003',nome:'SUELLEN HERNANDEZ DA SILVA'},
-{login:'N5932064',nome:'MONICA DA SILVA RODRIGUES'}
+  {login:'N6088107',nome:'LEANDRO GONÇALVES DE CARVALHO'},
+  {login:'N5619600',nome:'BRUNO COSTA BUCARD'},
+  {login:'N0189105',nome:'IGOR MARCELINO DE MARINS'},
+  {login:'N5737414',nome:'SANDRO DA SILVA CARVALHO'},
+  {login:'N5713690',nome:'GABRIELA TAVARES DA SILVA'},
+  {login:'N5802257',nome:'MAGNO FERRAREZ DE MORAIS'},
+  {login:'F201714',nome:'FERNANDA MESQUITA DE FREITAS'},
+  {login:'N6173055',nome:'JEFFERSON LUIS GONÇALVES COITINHO'},
+  {login:'N0125317',nome:'ROBERTO SILVA DO NASCIMENTO'},
+  {login:'F218860',nome:'ALDENES MARQUES IDALINO DA SILVA'},
+  {login:'N5819183',nome:'RODRIGO PIRES BERNARDINO'},
+  {login:'N5926003',nome:'SUELLEN HERNANDEZ DA SILVA'},
+  {login:'N5932064',nome:'MONICA DA SILVA RODRIGUES'}
 ];
 
 const RESIDENCIAL = [
-{login:'N0238475',nome:'MARLEY MARQUES RIBEIRO'},
-{login:'N5923221',nome:'KELLY PINHEIRO LIRA'},
-{login:'N5772086',nome:'THIAGO PEREIRA DA SILVA'},
-{login:'N0239871',nome:'LEONARDO FERREIRA LIMA DE ALMEIDA'},
-{login:'N5577565',nome:'MARISTELLA MARCIA DOS SANTOS'},
-{login:'N5972428',nome:'CRISTIANE HERMOGENES DA SILVA'},
-{login:'N4014011',nome:'ALAN MARINHO DIAS'},
-{login:'F106664',nome:'RAISSA LIMA DE OLIVEIRA'}
+  {login:'N0238475',nome:'MARLEY MARQUES RIBEIRO'},
+  {login:'N5923221',nome:'KELLY PINHEIRO LIRA'},
+  {login:'N5772086',nome:'THIAGO PEREIRA DA SILVA'},
+  {login:'N0239871',nome:'LEONARDO FERREIRA LIMA DE ALMEIDA'},
+  {login:'N5577565',nome:'MARISTELLA MARCIA DOS SANTOS'},
+  {login:'N5972428',nome:'CRISTIANE HERMOGENES DA SILVA'},
+  {login:'N4014011',nome:'ALAN MARINHO DIAS'},
+  {login:'F106664',nome:'RAISSA LIMA DE OLIVEIRA'}
 ];
 
 const INDICADORES = [
-'DPA - Ocupação','Chat TOA','ETIT por Evento RAL','ETIT por Evento REC',
-'ETIT Outage Sem Sinal (GPON)','Log Outage Reprog. GPON','ETIT Outage Res. Sem Sinal',
-'ETIT Outage Res. Degradação','Tempo Valid. Formulário','Tarefas Canceladas','Fechamento TOA x SIR'
+  'DPA - Ocupação','Chat TOA','ETIT por Evento RAL','ETIT por Evento REC',
+  'ETIT Outage Sem Sinal (GPON)','Log Outage Reprog. GPON','ETIT Outage Res. Sem Sinal',
+  'ETIT Outage Res. Degradação','Tempo Valid. Formulário','Tarefas Canceladas','Fechamento TOA x SIR'
 ];
 
+const TODOS_ANALISTAS = [...EMPRESARIAL, ...RESIDENCIAL];
+const allLogins = TODOS_ANALISTAS.map(a => a.login.toUpperCase());
+
+// Estado do upload
+const uploadedFiles = {};
+const parsedData = {};
+
+// ============================================
+// FUNCOES DE UPLOAD E PARSE
+// ============================================
+function handleFile(input, key) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, {type: "array"});
+      const firstSheet = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheet];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+      const allSheets = {};
+      workbook.SheetNames.forEach(function(name) {
+        allSheets[name] = XLSX.utils.sheet_to_json(workbook.Sheets[name], {defval: ""});
+      });
+      parsedData[key] = {sheets: allSheets, mainData: jsonData, sheetNames: workbook.SheetNames, fileName: file.name};
+      uploadedFiles[key] = true;
+      document.getElementById("status-" + key).textContent = "✔ Carregado (" + jsonData.length + " linhas)";
+      document.getElementById("status-" + key).className = "status ok";
+      document.getElementById("fname-" + key).textContent = file.name;
+      input.closest(".upload-card").classList.add("loaded");
+      updateUploadCount();
+    } catch(err) {
+      alert("Erro ao ler arquivo: " + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function updateUploadCount() {
+  const count = Object.keys(uploadedFiles).length;
+  document.getElementById("upload-count").textContent = count + " de 7 planilhas carregadas";
+  document.getElementById("btn-process").disabled = count === 0;
+}
+
+function limparTudo() {
+  Object.keys(uploadedFiles).forEach(function(k) { delete uploadedFiles[k]; });
+  Object.keys(parsedData).forEach(function(k) { delete parsedData[k]; });
+  document.querySelectorAll(".upload-card").forEach(function(c) {
+    c.classList.remove("loaded");
+    c.querySelector(".status").textContent = "Aguardando";
+    c.querySelector(".status").className = "status pending";
+    var fn = c.querySelector(".file-loaded-name");
+    if(fn) fn.textContent = "";
+    var inp = c.querySelector("input[type=file]");
+    if(inp) inp.value = "";
+  });
+  updateUploadCount();
+  document.getElementById("results-area").classList.remove("active");
+  document.getElementById("upload-area").style.display = "block";
+}
+
+function voltarUpload() {
+  document.getElementById("results-area").classList.remove("active");
+  document.getElementById("upload-area").style.display = "block";
+}
+
+// ============================================
+// FUNCOES DE PROCESSAMENTO
+// ============================================
+function findColumnByKeywords(headers, keywords) {
+  if (!headers || !headers.length) return null;
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i]).toUpperCase().trim();
+    for (var j = 0; j < keywords.length; j++) {
+      if (h.indexOf(keywords[j].toUpperCase()) !== -1) return headers[i];
+    }
+  }
+  return null;
+}
+
+function findLoginColumn(headers) {
+  return findColumnByKeywords(headers, ["LOGIN","MATRICULA","MATRÍCULA","RE","REGISTRO","USUARIO","USUÁRIO"]);
+}
+
+function findNameColumn(headers) {
+  return findColumnByKeywords(headers, ["NOME","ANALISTA","COLABORADOR","FUNCIONARIO","FUNCIONÁRIO"]);
+}
+
+function findValueColumn(headers, extraKeywords) {
+  var kw = ["PERCENTUAL","%","VALOR","RESULTADO","RESULTADO","TAXA","RATE","INDICADOR"];
+  if (extraKeywords) kw = extraKeywords.concat(kw);
+  return findColumnByKeywords(headers, kw);
+}
+
+function extractIndicatorData(sheetData, indicatorKeywords) {
+  if (!sheetData || !sheetData.length) return {consolidated: null, byAnalyst: {}};
+  var headers = Object.keys(sheetData[0]);
+  var loginCol = findLoginColumn(headers);
+  var nameCol = findNameColumn(headers);
+  var valueCol = findValueColumn(headers, indicatorKeywords);
+  
+  if (!valueCol) {
+    // Try numeric columns
+    for (var i = 0; i < headers.length; i++) {
+      var vals = sheetData.map(function(r) { return r[headers[i]]; }).filter(function(v) {
+        return typeof v === "number" || (typeof v === "string" && !isNaN(parseFloat(v)) && parseFloat(v) > 0 && parseFloat(v) <= 100);
+      });
+      if (vals.length > sheetData.length * 0.3) {
+        valueCol = headers[i];
+        break;
+      }
+    }
+  }
+  
+  var result = {consolidated: null, byAnalyst: {}};
+  var allValues = [];
+  
+  if (sheetData.length && valueCol) {
+    sheetData.forEach(function(row) {
+      var val = parseFloat(row[valueCol]);
+      if (isNaN(val)) return;
+      var login = loginCol ? String(row[loginCol]).toUpperCase().trim() : "";
+      if (login && allLogins.indexOf(login) !== -1) {
+        result.byAnalyst[login] = Math.round(val * 100) / 100;
+        allValues.push(val);
+      } else if (!loginCol) {
+        allValues.push(val);
+      }
+    });
+  }
+  
+  if (allValues.length > 0) {
+    result.consolidated = Math.round((allValues.reduce(function(a,b){return a+b;},0) / allValues.length) * 100) / 100;
+  }
+  
+  // If no per-analyst data but consolidated exists, check if first row has a general value
+  if (Object.keys(result.byAnalyst).length === 0 && !result.consolidated && sheetData.length > 0 && valueCol) {
+    var firstVal = parseFloat(sheetData[0][valueCol]);
+    if (!isNaN(firstVal)) result.consolidated = Math.round(firstVal * 100) / 100;
+  }
+  
+  return result;
+}
+
+function processarDados() {
+  var progress = document.getElementById("progress");
+  var fill = document.getElementById("progress-fill");
+  progress.classList.add("active");
+  fill.style.width = "10%";
+
+  setTimeout(function() {
+    fill.style.width = "30%";
+
+    // Initialize data structures
+    var consolidadoEmp = {};
+    var consolidadoRes = {};
+    var empAnalistas = {};
+    var resAnalistas = {};
+
+    EMPRESARIAL.forEach(function(a) {
+      empAnalistas[a.login] = {};
+      INDICADORES.forEach(function(ind) { empAnalistas[a.login][ind] = null; });
+    });
+    RESIDENCIAL.forEach(function(a) {
+      resAnalistas[a.login] = {};
+      INDICADORES.forEach(function(ind) { resAnalistas[a.login][ind] = null; });
+    });
+    INDICADORES.forEach(function(ind) { consolidadoEmp[ind] = null; consolidadoRes[ind] = null; });
+
+    // Map file keys to indicators
+    var fileIndicatorMap = {
+      'dpa': ['DPA - Ocupação'],
+      'chat': ['Chat TOA'],
+      'etit-ral': ['ETIT por Evento RAL'],
+      'etit-rec': ['ETIT por Evento REC'],
+      'outage-gpon': ['ETIT Outage Sem Sinal (GPON)'],
+      'log-reprog': ['Log Outage Reprog. GPON'],
+      'analitico': INDICADORES
+    };
+
+    // Process each uploaded file
+    Object.keys(parsedData).forEach(function(key) {
+      var pd = parsedData[key];
+      var indicators = fileIndicatorMap[key] || [];
+      
+      if (key === "analitico") {
+        // For the analytics file, try to extract all indicators from multiple sheets or columns
+        var mainData = pd.mainData;
+        if (mainData.length > 0) {
+          var headers = Object.keys(mainData[0]);
+          var loginCol = findLoginColumn(headers);
+          
+          // Try to find columns matching each indicator
+          INDICADORES.forEach(function(ind) {
+            var searchTerms = ind.split(/[\s-]+/).filter(function(s){return s.length > 2;});
+            var col = findColumnByKeywords(headers, searchTerms);
+            if (!col) col = findColumnByKeywords(headers, [ind]);
+            
+            if (col && loginCol) {
+              var empVals = [];
+              var resVals = [];
+              mainData.forEach(function(row) {
+                var login = String(row[loginCol]).toUpperCase().trim();
+                var val = parseFloat(row[col]);
+                if (isNaN(val)) return;
+                val = Math.round(val * 100) / 100;
+                
+                var isEmp = EMPRESARIAL.some(function(a){return a.login.toUpperCase()===login;});
+                var isRes = RESIDENCIAL.some(function(a){return a.login.toUpperCase()===login;});
+                
+                if (isEmp) {
+                  empAnalistas[login] = empAnalistas[login] || {};
+                  empAnalistas[login][ind] = val;
+                  empVals.push(val);
+                } else if (isRes) {
+                  resAnalistas[login] = resAnalistas[login] || {};
+                  resAnalistas[login][ind] = val;
+                  resVals.push(val);
+                }
+              });
+              if (empVals.length > 0) consolidadoEmp[ind] = Math.round((empVals.reduce(function(a,b){return a+b;},0)/empVals.length)*100)/100;
+              if (resVals.length > 0) consolidadoRes[ind] = Math.round((resVals.reduce(function(a,b){return a+b;},0)/resVals.length)*100)/100;
+            }
+          });
+          
+          // Also try each sheet for different indicators
+          pd.sheetNames.forEach(function(sheetName) {
+            var sheetData = pd.sheets[sheetName];
+            if (!sheetData || !sheetData.length) return;
+            INDICADORES.forEach(function(ind) {
+              var terms = ind.split(/[\s-]+/).filter(function(s){return s.length > 2;});
+              var nameMatch = terms.some(function(t){return sheetName.toUpperCase().indexOf(t.toUpperCase()) !== -1;});
+              if (nameMatch) {
+                var extracted = extractIndicatorData(sheetData, terms);
+                if (extracted.consolidated !== null) {
+                  if (consolidadoEmp[ind] === null) consolidadoEmp[ind] = extracted.consolidated;
+                }
+                Object.keys(extracted.byAnalyst).forEach(function(login) {
+                  if (empAnalistas[login] && empAnalistas[login][ind] === null) empAnalistas[login][ind] = extracted.byAnalyst[login];
+                  if (resAnalistas[login] && resAnalistas[login][ind] === null) resAnalistas[login][ind] = extracted.byAnalyst[login];
+                });
+              }
+            });
+          });
+        }
+      } else {
+        // For individual indicator files
+        indicators.forEach(function(ind) {
+          var keywords = ind.split(/[\s-]+/).filter(function(s){return s.length > 2;});
+          var extracted = extractIndicatorData(pd.mainData, keywords);
+          if (extracted.consolidated !== null) {
+            consolidadoEmp[ind] = consolidadoEmp[ind] || extracted.consolidated;
+            consolidadoRes[ind] = consolidadoRes[ind] || extracted.consolidated;
+          }
+          Object.keys(extracted.byAnalyst).forEach(function(login) {
+            if (empAnalistas[login]) empAnalistas[login][ind] = extracted.byAnalyst[login];
+            if (resAnalistas[login]) resAnalistas[login][ind] = extracted.byAnalyst[login];
+          });
+        });
+      }
+    });
+
+    fill.style.width = "60%";
+
+    // Calculate consolidated (weighted average)
+    var dadosConsolidado = {};
+    INDICADORES.forEach(function(ind) {
+      var e = consolidadoEmp[ind];
+      var r = consolidadoRes[ind];
+      if (e !== null && r !== null) dadosConsolidado[ind] = Math.round(((e * 13 + r * 8) / 21) * 100) / 100;
+      else if (e !== null) dadosConsolidado[ind] = e;
+      else if (r !== null) dadosConsolidado[ind] = r;
+      else dadosConsolidado[ind] = null;
+    });
+
+    fill.style.width = "80%";
+
+    // Render results
+    var now = new Date();
+    var monthNames = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+    document.getElementById("ref-month").textContent = monthNames[now.getMonth()] + "/" + now.getFullYear();
+    document.getElementById("process-date").textContent = now.toLocaleDateString("pt-BR") + " " + now.toLocaleTimeString("pt-BR");
+    document.getElementById("periodo-display").textContent = "📅 Período: " + monthNames[now.getMonth()] + "/" + now.getFullYear();
+    document.getElementById("update-display").textContent = "Processado: " + now.toLocaleDateString("pt-BR");
+
+    document.getElementById("cons").innerHTML = buildConsolidado(dadosConsolidado, consolidadoEmp, consolidadoRes);
+    document.getElementById("emp").innerHTML = buildSector("Empresarial", EMPRESARIAL, consolidadoEmp, empAnalistas);
+    document.getElementById("res").innerHTML = buildSector("Residencial", RESIDENCIAL, consolidadoRes, resAnalistas);
+    document.getElementById("metas").innerHTML = buildMetas();
+
+    fill.style.width = "100%";
+
+    setTimeout(function() {
+      document.getElementById("upload-area").style.display = "none";
+      document.getElementById("results-area").classList.add("active");
+      progress.classList.remove("active");
+      fill.style.width = "0";
+    }, 500);
+  }, 200);
+}
+
+// ============================================
+// FUNCOES DE STATUS E RENDER
+// ============================================
 function getStatus(valor, indicador) {
-  const m = METAS[indicador];
-  if (!m || valor === null || valor === undefined || valor === '-') return {cls:'yl',badge:'badge-yl',text:'N/D'};
-  const v = parseFloat(valor);
-  if (isNaN(v)) return {cls:'yl',badge:'badge-yl',text:'N/D'};
-  if (m.dir === 'up') {
-    if (v >= m.meta) return {cls:'gr',badge:'badge-gr',text:'✔ Atingido'};
-    if (v >= m.meta * 0.9) return {cls:'yl',badge:'badge-yl',text:'⚠ Atenção'};
-    return {cls:'rd',badge:'badge-rd',text:'✖ Abaixo'};
+  var m = METAS[indicador];
+  if (!m || valor === null || valor === undefined || valor === "-") return {cls:"yl",badge:"badge-yl",text:"N/D"};
+  var v = parseFloat(valor);
+  if (isNaN(v)) return {cls:"yl",badge:"badge-yl",text:"N/D"};
+  if (m.dir === "up") {
+    if (v >= m.meta) return {cls:"gr",badge:"badge-gr",text:"✔ Atingido"};
+    if (v >= m.meta * 0.9) return {cls:"yl",badge:"badge-yl",text:"⚠ Atenção"};
+    return {cls:"rd",badge:"badge-rd",text:"✖ Abaixo"};
   } else {
-    if (v <= m.meta) return {cls:'gr',badge:'badge-gr',text:'✔ Atingido'};
-    if (v <= m.meta * 1.1) return {cls:'yl',badge:'badge-yl',text:'⚠ Atenção'};
-    return {cls:'rd',badge:'badge-rd',text:'✖ Abaixo'};
+    if (v <= m.meta) return {cls:"gr",badge:"badge-gr",text:"✔ Atingido"};
+    if (v <= m.meta * 1.1) return {cls:"yl",badge:"badge-yl",text:"⚠ Atenção"};
+    return {cls:"rd",badge:"badge-rd",text:"✖ Abaixo"};
   }
 }
 
 function pct(v, indicador) {
-  const m = METAS[indicador];
-  if (!m || v === null || v === '-') return 0;
-  const val = parseFloat(v);
+  var m = METAS[indicador];
+  if (!m || v === null || v === "-") return 0;
+  var val = parseFloat(v);
   if (isNaN(val)) return 0;
-  if (m.dir === 'up') return Math.min(100, (val / m.meta) * 100);
+  if (m.dir === "up") return Math.min(100, (val / m.meta) * 100);
   return Math.min(100, (m.meta / Math.max(val, 0.1)) * 100);
 }
 
-function buildKPICards(data, containerId) {
-  let html = '<div class="kg">';
-  for (const ind of INDICADORES) {
-    const val = data[ind];
-    const st = getStatus(val, ind);
-    const m = METAS[ind];
-    const displayVal = (val !== null && val !== undefined && val !== '-') ? val + '%' : 'Aguardando dados';
-    const pctVal = pct(val, ind);
-    const dirLabel = m.dir === 'up' ? '↑ Meta: ≥' + m.meta + '%' : '↓ Meta: ≤' + m.meta + '%';
+function buildKPICards(data) {
+  var html = '<div class="kg">';
+  INDICADORES.forEach(function(ind) {
+    var val = data[ind];
+    var st = getStatus(val, ind);
+    var m = METAS[ind];
+    var displayVal = (val !== null && val !== undefined && val !== "-") ? val + "%" : "Aguardando dados";
+    var pctVal = pct(val, ind);
+    var dirLabel = m.dir === "up" ? "↑ Meta: ≥" + m.meta + "%" : "↓ Meta: ≤" + m.meta + "%";
     html += '<div class="kc"><div class="lb">' + ind + '</div>';
     html += '<div class="vl ' + st.cls + '">' + displayVal + '</div>';
     html += '<div class="mt">' + dirLabel + ' | <span class="' + st.badge + ' badge">' + st.text + '</span></div>';
     html += '<div class="bar"><div class="bar-fill bg-' + st.cls + '" style="width:' + pctVal + '%"></div></div>';
     html += '</div>';
-  }
+  });
   html += '</div>';
   return html;
 }
 
 function buildAnalystTable(analysts, sectorData) {
-  let html = '<div class="tbl-wrap"><table><thead><tr><th>Login</th><th>Analista</th>';
-  for (const ind of INDICADORES) {
-    html += '<th>' + ind + '</th>';
-  }
+  var html = '<div class="tbl-wrap"><table><thead><tr><th>Login</th><th>Analista</th>';
+  INDICADORES.forEach(function(ind) { html += "<th>" + ind + "</th>"; });
   html += '<th>Status</th></tr></thead><tbody>';
-  for (const a of analysts) {
-    const d = sectorData[a.login] || {};
-    let atingidos = 0;
-    let total = 0;
+  analysts.forEach(function(a) {
+    var d = sectorData[a.login] || {};
+    var atingidos = 0;
+    var total = 0;
     html += '<tr><td style="font-family:monospace;font-size:.75em">' + a.login + '</td><td style="white-space:nowrap">' + a.nome + '</td>';
-    for (const ind of INDICADORES) {
-      const v = d[ind];
-      const st = getStatus(v, ind);
-      const display = (v !== null && v !== undefined && v !== '-') ? v + '%' : '-';
-      if (v !== null && v !== undefined && v !== '-') {
-        total++;
-        if (st.cls === 'gr') atingidos++;
-      }
+    INDICADORES.forEach(function(ind) {
+      var v = d[ind];
+      var st = getStatus(v, ind);
+      var display = (v !== null && v !== undefined && v !== "-") ? v + "%" : "-";
+      if (v !== null && v !== undefined && v !== "-") { total++; if (st.cls === "gr") atingidos++; }
       html += '<td class="' + st.cls + '">' + display + '</td>';
-    }
-    const statusPct = total > 0 ? Math.round((atingidos/total)*100) : 0;
-    html += '<td><span class="badge ' + (statusPct >= 80 ? 'badge-gr' : statusPct >= 60 ? 'badge-yl' : 'badge-rd') + '">' + atingidos + '/' + total + '</span></td>';
-    html += '</tr>';
-  }
+    });
+    var statusPct = total > 0 ? Math.round((atingidos/total)*100) : 0;
+    html += '<td><span class="badge ' + (statusPct >= 80 ? "badge-gr" : statusPct >= 60 ? "badge-yl" : "badge-rd") + '">' + atingidos + "/" + total + '</span></td>';
+    html += "</tr>";
+  });
   html += '</tbody></table></div>';
   return html;
 }
 
-// ============================================
-// DADOS FEVEREIRO 2026 - CONSOLIDADO GRUPO
-// (Fonte: Power BI - Grupo Rio e ES / Leste)
-// Atualizar semanalmente com dados reais
-// ============================================
-
-const dadosConsolidadoEmp = {
-'DPA - Ocupação': 88.35,
-'Chat TOA': 85.7,
-'ETIT por Evento RAL': 88.6,
-'ETIT por Evento REC': 88.6,
-'ETIT Outage Sem Sinal (GPON)': 85.7,
-'Log Outage Reprog. GPON': null,
-'ETIT Outage Res. Sem Sinal': null,
-'ETIT Outage Res. Degradação': null,
-'Tempo Valid. Formulário': null,
-'Tarefas Canceladas': null,
-'Fechamento TOA x SIR': null
-};
-
-const dadosConsolidadoRes = {
-'DPA - Ocupação': 84.90,
-'Chat TOA': 85.7,
-'ETIT por Evento RAL': null,
-'ETIT por Evento REC': null,
-'ETIT Outage Sem Sinal (GPON)': 85.7,
-'Log Outage Reprog. GPON': null,
-'ETIT Outage Res. Sem Sinal': null,
-'ETIT Outage Res. Degradação': null,
-'Tempo Valid. Formulário': null,
-'Tarefas Canceladas': null,
-'Fechamento TOA x SIR': null
-};
-
-// Dados consolidados gerais (média ponderada)
-const dadosConsolidado = {};
-for (const ind of INDICADORES) {
-  const e = dadosConsolidadoEmp[ind];
-  const r = dadosConsolidadoRes[ind];
-  if (e !== null && r !== null) dadosConsolidado[ind] = Math.round(((e * 13 + r * 8) / 21) * 100) / 100;
-  else if (e !== null) dadosConsolidado[ind] = e;
-  else if (r !== null) dadosConsolidado[ind] = r;
-  else dadosConsolidado[ind] = null;
-}
-
-// Dados por analista - PREENCHER COM DADOS REAIS DO ANALÍTICO
-const dadosEmpAnalistas = {};
-for (const a of EMPRESARIAL) {
-  dadosEmpAnalistas[a.login] = {};
-  for (const ind of INDICADORES) dadosEmpAnalistas[a.login][ind] = null;
-}
-
-const dadosResAnalistas = {};
-for (const a of RESIDENCIAL) {
-  dadosResAnalistas[a.login] = {};
-  for (const ind of INDICADORES) dadosResAnalistas[a.login][ind] = null;
-}
-
-// BUILD PANELS
-function buildConsolidado() {
-  let h = '<div class="sec"><h2>📊 Visão Consolidada - Fevereiro/2026</h2>';
-  h += '<div class="note">ℹ️ Dados do grupo <strong>Rio e ES / Leste</strong> extraídos do Power BI. Valores \"null\" aguardam extração dos analíticos ou atualização semanal.</div>';
-  h += buildKPICards(dadosConsolidado, 'cons');
+function buildConsolidado(dadosConsolidado, consolidadoEmp, consolidadoRes) {
+  var h = '<div class="sec"><h2>📊 Visão Consolidada</h2>';
+  var filesInfo = Object.keys(parsedData).map(function(k){ return parsedData[k].fileName; }).join(", ");
+  h += '<div class="note">ℹ️ Dados processados a partir das planilhas: <strong>' + filesInfo + '</strong></div>';
+  h += buildKPICards(dadosConsolidado);
   h += '</div>';
-  
-  h += '<div class="sec"><h2>Empresarial (Grupo Rio e ES)</h2>';
-  h += buildKPICards(dadosConsolidadoEmp, 'cons-emp');
+  h += '<div class="sec"><h2>Empresarial (Grupo)</h2>';
+  h += buildKPICards(consolidadoEmp);
   h += '</div>';
-  
-  h += '<div class="sec"><h2>Residencial (Grupo Rio e ES)</h2>';
-  h += buildKPICards(dadosConsolidadoRes, 'cons-res');
+  h += '<div class="sec"><h2>Residencial (Grupo)</h2>';
+  h += buildKPICards(consolidadoRes);
   h += '</div>';
-  
   h += '<div class="sec"><h2>📋 Resumo Comparativo</h2>';
   h += '<div class="tbl-wrap"><table><thead><tr><th>Indicador</th><th>Meta</th><th>Direção</th><th>Empresarial</th><th>Residencial</th><th>Consolidado</th></tr></thead><tbody>';
-  for (const ind of INDICADORES) {
-    const m = METAS[ind];
-    const eVal = dadosConsolidadoEmp[ind];
-    const rVal = dadosConsolidadoRes[ind];
-    const cVal = dadosConsolidado[ind];
-    const eSt = getStatus(eVal, ind);
-    const rSt = getStatus(rVal, ind);
-    const cSt = getStatus(cVal, ind);
+  INDICADORES.forEach(function(ind) {
+    var m = METAS[ind];
+    var eVal = consolidadoEmp[ind];
+    var rVal = consolidadoRes[ind];
+    var cVal = dadosConsolidado[ind];
+    var eSt = getStatus(eVal, ind);
+    var rSt = getStatus(rVal, ind);
+    var cSt = getStatus(cVal, ind);
     h += '<tr><td><strong>' + ind + '</strong></td>';
-    h += '<td>' + m.meta + '%</td>';
-    h += '<td>' + (m.dir==='up'?'↑ Bom p/ +':'↓ Bom p/ -') + '</td>';
-    h += '<td class="' + eSt.cls + '">' + (eVal !== null ? eVal + '%' : '-') + '</td>';
-    h += '<td class="' + rSt.cls + '">' + (rVal !== null ? rVal + '%' : '-') + '</td>';
-    h += '<td class="' + cSt.cls + '"><strong>' + (cVal !== null ? cVal + '%' : '-') + '</strong></td>';
-    h += '</tr>';
-  }
+    h += "<td>" + m.meta + "%</td>";
+    h += "<td>" + (m.dir==="up"?"↑ Bom p/ +":"↓ Bom p/ -") + "</td>";
+    h += '<td class="' + eSt.cls + '">' + (eVal !== null ? eVal + "%" : "-") + '</td>';
+    h += '<td class="' + rSt.cls + '">' + (rVal !== null ? rVal + "%" : "-") + '</td>';
+    h += '<td class="' + cSt.cls + '"><strong>' + (cVal !== null ? cVal + "%" : "-") + '</strong></td>';
+    h += "</tr>";
+  });
   h += '</tbody></table></div></div>';
   return h;
 }
 
 function buildSector(sectorName, analysts, sectorConsolidado, analystData) {
-  let h = '<div class="sec"><h2>📊 ' + sectorName + ' - Consolidado Fevereiro/2026</h2>';
-  h += buildKPICards(sectorConsolidado, sectorName);
+  var h = '<div class="sec"><h2>📊 ' + sectorName + ' - Consolidado</h2>';
+  h += buildKPICards(sectorConsolidado);
   h += '</div>';
   h += '<div class="sec"><h2>👥 ' + sectorName + ' - Por Analista</h2>';
-  h += '<div class="note">ℹ️ Dados individuais serão preenchidos após extração do analítico (Analítico Indicadores TOA - 202602.xlsx). Campos com \"-\" aguardam dados.</div>';
+  var hasData = false;
+  analysts.forEach(function(a) {
+    var d = analystData[a.login] || {};
+    INDICADORES.forEach(function(ind) { if(d[ind] !== null && d[ind] !== undefined) hasData = true; });
+  });
+  if (!hasData) h += '<div class="note">ℹ️ Dados individuais não encontrados nas planilhas carregadas. Verifique se a planilha "Analítico Indicadores TOA" foi carregada e contém a coluna de LOGIN/MATRÍCULA.</div>';
   h += buildAnalystTable(analysts, analystData);
   h += '</div>';
   return h;
 }
 
 function buildMetas() {
-  let h = '<div class="sec"><h2>🎯 Metas e Glossário dos Indicadores</h2>';
+  var h = '<div class="sec"><h2>🎯 Metas e Glossário dos Indicadores</h2>';
   h += '<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Indicador</th><th>Meta</th><th>Direção</th><th>Descrição</th><th>Período</th></tr></thead><tbody>';
-  
-  const descs = {
+  var descs = {
     'DPA - Ocupação': '% de ocupação produtiva do colaborador',
     'Chat TOA': '% de interação dentro de 10 min',
     'ETIT por Evento RAL': '% tarefas direcionadas para o técnico em até 30min (RAL)',
@@ -315,64 +671,60 @@ function buildMetas() {
     'Tarefas Canceladas': '% de tarefas canceladas sobre o total',
     'Fechamento TOA x SIR': 'Assertividade do fechamento TOA versus SIR'
   };
-  
-  const periodos = {
-    'DPA - Ocupação': 'Madrugada',
-    'Chat TOA': 'Madrugada',
-    'ETIT por Evento RAL': 'Madrugada',
-    'ETIT por Evento REC': 'Madrugada',
-    'ETIT Outage Sem Sinal (GPON)': 'Todos',
-    'Log Outage Reprog. GPON': 'Todos',
-    'ETIT Outage Res. Sem Sinal': 'Todos',
-    'ETIT Outage Res. Degradação': 'Todos',
-    'Tempo Valid. Formulário': 'Todos',
-    'Tarefas Canceladas': 'Todos',
+  var periodos = {
+    'DPA - Ocupação': 'Madrugada', 'Chat TOA': 'Madrugada',
+    'ETIT por Evento RAL': 'Madrugada', 'ETIT por Evento REC': 'Madrugada',
+    'ETIT Outage Sem Sinal (GPON)': 'Todos', 'Log Outage Reprog. GPON': 'Todos',
+    'ETIT Outage Res. Sem Sinal': 'Todos', 'ETIT Outage Res. Degradação': 'Todos',
+    'Tempo Valid. Formulário': 'Todos', 'Tarefas Canceladas': 'Todos',
     'Fechamento TOA x SIR': 'Todos'
   };
-  
-  let i = 1;
-  for (const ind of INDICADORES) {
-    const m = METAS[ind];
-    h += '<tr><td>' + i + '</td><td><strong>' + ind + '</strong></td>';
-    h += '<td class="' + (m.dir==='up'?'gr':'rd') + '">' + m.meta + '%</td>';
-    h += '<td>' + (m.dir==='up'?'↑ Quanto maior, melhor':'↓ Quanto menor, melhor') + '</td>';
-    h += '<td>' + (descs[ind]||'') + '</td>';
-    h += '<td>' + (periodos[ind]||'Todos') + '</td></tr>';
+  var i = 1;
+  INDICADORES.forEach(function(ind) {
+    var m = METAS[ind];
+    h += "<tr><td>" + i + "</td><td><strong>" + ind + "</strong></td>";
+    h += '<td class="' + (m.dir==="up"?"gr":"rd") + '">' + m.meta + "%</td>";
+    h += "<td>" + (m.dir==="up"?"↑ Quanto maior, melhor":"↓ Quanto menor, melhor") + "</td>";
+    h += "<td>" + (descs[ind]||"") + "</td>";
+    h += "<td>" + (periodos[ind]||"Todos") + "</td></tr>";
     i++;
-  }
+  });
   h += '</tbody></table></div></div>';
-  
-  h += '<div class="sec"><h2>📅 Calendário de Atualizações</h2>';
-  h += '<div class="note"><strong>Fluxo semanal:</strong> Atualizar dados toda segunda-feira com dados da semana anterior.<br>';
-  h += '<strong>Fechamento mensal:</strong> Ao final do mês, consolidar dados finais e iniciar novo mês na semana seguinte.<br>';
-  h += '<strong>Indicadores com período Madrugada:</strong> DPA, Chat TOA, ETIT RAL, ETIT REC - filtrar período como "Madrugada" no Power BI.</div>';
-  h += '</div>';
-  
+
   h += '<div class="sec"><h2>👥 Equipe Completa</h2>';
   h += '<div class="tbl-wrap"><table><thead><tr><th>Setor</th><th>Login</th><th>Nome Completo</th></tr></thead><tbody>';
-  for (const a of EMPRESARIAL) {
-    h += '<tr><td><span class="badge badge-gr">EMP</span></td><td style="font-family:monospace">' + a.login + '</td><td>' + a.nome + '</td></tr>';
-  }
-  for (const a of RESIDENCIAL) {
-    h += '<tr><td><span class="badge badge-rd">RES</span></td><td style="font-family:monospace">' + a.login + '</td><td>' + a.nome + '</td></tr>';
-  }
+  EMPRESARIAL.forEach(function(a) {
+    h += '<tr><td><span class="badge badge-gr">EMP</span></td><td style="font-family:monospace">' + a.login + "</td><td>" + a.nome + "</td></tr>";
+  });
+  RESIDENCIAL.forEach(function(a) {
+    h += '<tr><td><span class="badge badge-rd">RES</span></td><td style="font-family:monospace">' + a.login + "</td><td>" + a.nome + "</td></tr>";
+  });
   h += '</tbody></table></div></div>';
-  
+
+  h += '<div class="sec"><h2>📤 Instruções de Upload</h2>';
+  h += '<div class="note">';
+  h += "<strong>Como usar este portal:</strong><br>";
+  h += "1. Exporte as planilhas do Power BI / DPA Verint / Analítico TOA em formato .xlsx<br>";
+  h += "2. Faça o upload de cada planilha no campo correspondente<br>";
+  h += "3. Clique em Processar Dados para gerar o dashboard<br><br>";
+  h += "<strong>Dicas:</strong><br>";
+  h += "- As planilhas devem conter colunas de LOGIN/MATRÍCULA para identificar analistas<br>";
+  h += "- Valores percentuais serão identificados automaticamente<br>";
+  h += "- A planilha Analítico TOA pode conter múltiplos indicadores em diferentes colunas ou abas<br>";
+  h += "- Não é obrigatório carregar todas as 7 planilhas - o dashboard mostrará os dados disponíveis";
+  h += '</div></div>';
   return h;
 }
 
-// RENDER
-document.getElementById('cons').innerHTML = buildConsolidado();
-document.getElementById('emp').innerHTML = buildSector('Empresarial', EMPRESARIAL, dadosConsolidadoEmp, dadosEmpAnalistas);
-document.getElementById('res').innerHTML = buildSector('Residencial', RESIDENCIAL, dadosConsolidadoRes, dadosResAnalistas);
-document.getElementById('metas').innerHTML = buildMetas();
-
-function showPanel(id) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('act'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('act'));
-  document.getElementById(id).classList.add('act');
-  event.target.classList.add('act');
+function showPanel(id, el) {
+  document.querySelectorAll(".panel").forEach(function(p) { p.classList.remove("act"); });
+  document.querySelectorAll(".tab").forEach(function(t) { t.classList.remove("act"); });
+  document.getElementById(id).classList.add("act");
+  el.classList.add("act");
 }
+
+// Initialize metas panel content (always visible)
+document.getElementById("metas").innerHTML = buildMetas();
 </script>
 </body>
 </html>
