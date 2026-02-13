@@ -10,10 +10,20 @@ from src.config import (
     COL_LOGIN, COL_NOME, COL_BASE, COL_DATA, COL_MES, COL_ANOMES,
     COL_VOL_TOTAL, COL_DPA_RESULTADO,
     COR_PRIMARIA, COR_SUCESSO, COR_ALERTA, COR_PERIGO, COR_INFO,
+    # ETIT
+    ETIT_COL_LOGIN, ETIT_COL_DEMANDA, ETIT_COL_VOLUME,
+    ETIT_COL_STATUS, ETIT_COL_TIPO, ETIT_COL_CAUSA,
+    ETIT_COL_REGIONAL, ETIT_COL_TURNO, ETIT_COL_TMA, ETIT_COL_TMR,
+    ETIT_COL_DT_ACIONAMENTO, ETIT_COL_ANOMES, ETIT_COL_INDICADOR_VAL,
+    ETIT_COL_NOTA, ETIT_COL_AREA, ETIT_COL_CIDADE, ETIT_COL_UF,
 )
 from src.processors import (
     load_produtividade, resumo_mensal, resumo_geral,
     evolucao_diaria, composicao_volume, primeiro_nome,
+    # ETIT
+    load_etit, etit_resumo_analista, etit_por_demanda,
+    etit_por_tipo, etit_por_causa, etit_por_regional,
+    etit_por_turno, etit_evolucao_diaria,
 )
 
 # =====================================================
@@ -134,6 +144,15 @@ st.markdown("""
     }
     .sector-res { background: rgba(41,128,185,0.15); color: #5DADE2; }
     .sector-emp { background: rgba(243,156,18,0.15); color: #F39C12; }
+
+    /* ETIT highlight card */
+    .etit-card {
+        background: var(--secondary-background-color);
+        border-radius: 10px;
+        padding: 1rem 1.2rem;
+        border-left: 4px solid #8E44AD;
+        margin-bottom: 0.6rem;
+    }
 
     /* Table styling */
     .dataframe { font-size: 0.85rem !important; }
@@ -358,12 +377,20 @@ st.markdown("""
 # UPLOAD (persiste dados no session_state)
 # =====================================================
 with st.container():
-    col_upload, col_info = st.columns([2, 1])
-    with col_upload:
+    col_upload1, col_upload2, col_info = st.columns([2, 2, 1])
+    with col_upload1:
         uploaded_file = st.file_uploader(
-            "📁 Faça upload da planilha de Produtividade COP Rede (Analítico)",
+            "📁 Planilha de Produtividade (Analítico)",
             type=["xlsx", "xls"],
             help="Planilha com aba 'Analítico Produtividade 2026' ou similar",
+            key="upload_prod",
+        )
+    with col_upload2:
+        uploaded_etit = st.file_uploader(
+            "📁 Planilha Analítico Empresarial (ETIT)",
+            type=["xlsx", "xls"],
+            help="Planilha com dados ETIT POR EVENTO — opcional",
+            key="upload_etit",
         )
     with col_info:
         st.info(
@@ -376,12 +403,18 @@ if uploaded_file is not None:
     st.session_state["uploaded_bytes"] = uploaded_file.getvalue()
     st.session_state["uploaded_name"] = uploaded_file.name
 
+if uploaded_etit is not None:
+    st.session_state["uploaded_etit_bytes"] = uploaded_etit.getvalue()
+    st.session_state["uploaded_etit_name"] = uploaded_etit.name
+
 if "uploaded_bytes" not in st.session_state:
     st.markdown("---")
     st.markdown("### 👋 Bem-vindo!")
     st.markdown(
         "Faça upload da planilha **Produtividade COP Rede - Analítico** acima para "
-        "visualizar os dados de produtividade da sua equipe."
+        "visualizar os dados de produtividade da sua equipe.\n\n"
+        "Opcionalmente, faça upload da planilha **Analítico Empresarial** para "
+        "visualizar os dados de **ETIT POR EVENTO**."
     )
     with st.expander("📋 Analistas monitorados"):
         st.dataframe(BASE_EQUIPE, use_container_width=True, hide_index=True)
@@ -389,22 +422,42 @@ if "uploaded_bytes" not in st.session_state:
 
 
 # =====================================================
-# PROCESSAR DADOS
+# PROCESSAR DADOS — Produtividade
 # =====================================================
 try:
-    with st.spinner("Carregando e processando dados..."):
+    with st.spinner("Carregando e processando dados de produtividade..."):
         file_obj = io.BytesIO(st.session_state["uploaded_bytes"])
         df = load_produtividade(file_obj)
 
     if df.empty:
-        st.error("Nenhum analista da equipe encontrado na planilha. Verifique o arquivo.")
+        st.error("Nenhum analista da equipe encontrado na planilha de produtividade. Verifique o arquivo.")
         st.stop()
 
 except Exception as e:
-    st.error(f"Erro ao processar a planilha: {e}")
+    st.error(f"Erro ao processar a planilha de produtividade: {e}")
     with st.expander("Detalhes do erro"):
         st.code(traceback.format_exc())
     st.stop()
+
+
+# =====================================================
+# PROCESSAR DADOS — ETIT (opcional)
+# =====================================================
+df_etit = pd.DataFrame()
+etit_loaded = False
+
+if "uploaded_etit_bytes" in st.session_state:
+    try:
+        with st.spinner("Carregando dados ETIT POR EVENTO..."):
+            etit_obj = io.BytesIO(st.session_state["uploaded_etit_bytes"])
+            df_etit = load_etit(etit_obj)
+            etit_loaded = not df_etit.empty
+            if not etit_loaded:
+                st.warning("Nenhum analista da equipe encontrado nos dados ETIT POR EVENTO.")
+    except Exception as e:
+        st.warning(f"Erro ao processar planilha ETIT: {e}")
+        with st.expander("Detalhes do erro"):
+            st.code(traceback.format_exc())
 
 
 # =====================================================
@@ -429,7 +482,7 @@ with st.sidebar:
 
     st.markdown("---")
     if st.button("🗑️ Limpar dados carregados", use_container_width=True):
-        for key in ["uploaded_bytes", "uploaded_name"]:
+        for key in ["uploaded_bytes", "uploaded_name", "uploaded_etit_bytes", "uploaded_etit_name"]:
             st.session_state.pop(key, None)
         st.rerun()
 
@@ -443,12 +496,27 @@ with st.sidebar:
             analistas_options[analistas_options[COL_LOGIN]==x][COL_NOME].iloc[0] if len(analistas_options[analistas_options[COL_LOGIN]==x]) > 0 else x,
     )
 
-# Aplicar filtros
+    # ETIT status
+    if etit_loaded:
+        st.markdown("---")
+        st.success(f"✅ ETIT: {len(df_etit)} eventos carregados")
+
+# Aplicar filtros — Produtividade
 df_filtrado = df.copy()
 if mes_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado[COL_ANOMES] == mes_selecionado]
 if setor_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["Setor"] == setor_selecionado]
+
+# Aplicar filtros — ETIT
+df_etit_filtrado = df_etit.copy()
+if etit_loaded:
+    if mes_selecionado != "Todos" and ETIT_COL_ANOMES in df_etit_filtrado.columns:
+        df_etit_filtrado = df_etit_filtrado[df_etit_filtrado[ETIT_COL_ANOMES] == str(mes_selecionado)]
+    if setor_selecionado != "Todos":
+        df_etit_filtrado = df_etit_filtrado[df_etit_filtrado["Setor"] == setor_selecionado]
+    if analista_selecionado != "Todos":
+        df_etit_filtrado = df_etit_filtrado[df_etit_filtrado[ETIT_COL_LOGIN] == analista_selecionado]
 
 
 # =====================================================
@@ -522,22 +590,48 @@ if analista_selecionado != "Todos":
             comp_df = comp_df.sort_values("Volume", ascending=True)
             st.bar_chart(comp_df.set_index("Atividade"), horizontal=True, color=COR_PRIMARIA, height=300)
 
+        # ETIT individual detail
+        if etit_loaded and not df_etit_filtrado.empty:
+            st.markdown("##### ⚡ ETIT POR EVENTO — Este Analista")
+            etit_ind = df_etit_filtrado[df_etit_filtrado[ETIT_COL_LOGIN] == analista_selecionado]
+            if not etit_ind.empty:
+                ei1, ei2, ei3, ei4 = st.columns(4)
+                etit_total = etit_ind[ETIT_COL_VOLUME].sum()
+                etit_ader = etit_ind[ETIT_COL_INDICADOR_VAL].sum()
+                etit_pct = (etit_ader / etit_total * 100) if etit_total > 0 else 0
+                etit_tma = etit_ind[ETIT_COL_TMA].mean()
+                with ei1:
+                    st.markdown(kpi_card("Eventos ETIT", f"{etit_total:,.0f}", "#8E44AD"), unsafe_allow_html=True)
+                with ei2:
+                    st.markdown(kpi_card("Aderentes", f"{etit_ader:,.0f}", COR_SUCESSO), unsafe_allow_html=True)
+                with ei3:
+                    ad_color = COR_SUCESSO if etit_pct >= 90 else (COR_ALERTA if etit_pct >= 70 else COR_PERIGO)
+                    st.markdown(kpi_card("Aderência", f"{etit_pct:.1f}", ad_color, suffix="%"), unsafe_allow_html=True)
+                with ei4:
+                    st.markdown(kpi_card("TMA Médio", f"{etit_tma:.4f}", COR_INFO), unsafe_allow_html=True)
+            else:
+                st.caption("Nenhum evento ETIT encontrado para este analista no período.")
+
         st.markdown("---")
 
 
 # =====================================================
 # TABS PRINCIPAIS
 # =====================================================
-tab1, tab_lid, tab2, tab3, tab4 = st.tabs([
+tab_labels = [
     "🏆 Ranking",
     "👑 Líderes",
     "📅 Evolução Diária",
     "🔍 Composição",
     "📋 Dados Detalhados",
-])
+]
+if etit_loaded:
+    tab_labels.append("⚡ ETIT por Evento")
+
+tabs = st.tabs(tab_labels)
 
 # ---- TAB 1: RANKING ----
-with tab1:
+with tabs[0]:
     resumo = resumo_geral(df_filtrado)
 
     if not resumo.empty:
@@ -601,7 +695,7 @@ with tab1:
 
 
 # ---- TAB LÍDERES ----
-with tab_lid:
+with tabs[1]:
     resumo_full = resumo_geral(df_filtrado)
     resumo_lid = resumo_full[resumo_full[COL_LOGIN].isin(LIDERES_IDS)].copy()
     resumo_equipe_all = resumo_full[~resumo_full[COL_LOGIN].isin(LIDERES_IDS)].copy()
@@ -706,7 +800,6 @@ with tab_lid:
                     "Média/Dia": lr.get("Media_Diaria", 0),
                     "DPA %": lr.get("DPA_Media", None),
                 })
-            # Add team average row
             rows.append({
                 "Analista": "📊 MÉDIA EQUIPE",
                 "Vol. Total": team_avg_vol_s,
@@ -734,7 +827,7 @@ with tab_lid:
 
 
 # ---- TAB 2: EVOLUÇÃO DIÁRIA ----
-with tab2:
+with tabs[2]:
     daily = evolucao_diaria(df_filtrado)
 
     if not daily.empty:
@@ -766,7 +859,7 @@ with tab2:
 
 
 # ---- TAB 3: COMPOSIÇÃO ----
-with tab3:
+with tabs[3]:
     comp = composicao_volume(df_filtrado)
 
     if not comp.empty:
@@ -804,7 +897,7 @@ with tab3:
 
 
 # ---- TAB 4: DADOS DETALHADOS ----
-with tab4:
+with tabs[4]:
     st.markdown("#### Resumo por Analista")
     resumo_det = resumo_geral(df_filtrado)
 
@@ -852,14 +945,226 @@ with tab4:
     )
 
 
+# ---- TAB 5: ETIT POR EVENTO ----
+if etit_loaded:
+    with tabs[5]:
+        st.markdown("#### ⚡ ETIT POR EVENTO — Análise da Equipe")
+
+        if df_etit_filtrado.empty:
+            st.warning("Nenhum dado ETIT POR EVENTO encontrado com os filtros atuais.")
+        else:
+            # ---- KPIs ETIT ----
+            etit_total_eventos = df_etit_filtrado[ETIT_COL_VOLUME].sum()
+            etit_total_ader = df_etit_filtrado[ETIT_COL_INDICADOR_VAL].sum()
+            etit_pct_ader = (etit_total_ader / etit_total_eventos * 100) if etit_total_eventos > 0 else 0
+            etit_n_analistas = df_etit_filtrado[ETIT_COL_LOGIN].nunique()
+            etit_tma_geral = df_etit_filtrado[ETIT_COL_TMA].mean()
+            etit_tmr_geral = df_etit_filtrado[ETIT_COL_TMR].mean()
+
+            ek1, ek2, ek3, ek4, ek5, ek6 = st.columns(6)
+            with ek1:
+                st.markdown(kpi_card("Total Eventos", f"{etit_total_eventos:,.0f}", "#8E44AD"), unsafe_allow_html=True)
+            with ek2:
+                st.markdown(kpi_card("Aderentes", f"{etit_total_ader:,.0f}", COR_SUCESSO), unsafe_allow_html=True)
+            with ek3:
+                ad_c = COR_SUCESSO if etit_pct_ader >= 90 else (COR_ALERTA if etit_pct_ader >= 70 else COR_PERIGO)
+                st.markdown(kpi_card("Aderência", f"{etit_pct_ader:.1f}", ad_c, suffix="%"), unsafe_allow_html=True)
+            with ek4:
+                st.markdown(kpi_card("Analistas", f"{etit_n_analistas}", COR_INFO), unsafe_allow_html=True)
+            with ek5:
+                st.markdown(kpi_card("TMA Médio", f"{etit_tma_geral:.4f}", COR_PRIMARIA), unsafe_allow_html=True)
+            with ek6:
+                st.markdown(kpi_card("TMR Médio", f"{etit_tmr_geral:.4f}", COR_ALERTA), unsafe_allow_html=True)
+
+            st.markdown("")
+
+            # ---- Ranking por Analista ----
+            st.markdown("##### 🏆 Ranking ETIT por Analista")
+            resumo_etit = etit_resumo_analista(df_etit_filtrado)
+            if not resumo_etit.empty:
+                disp_etit = resumo_etit.copy()
+                disp_etit["Nome"] = disp_etit["Nome"].apply(primeiro_nome)
+                disp_cols_etit = ["Nome", "Setor", "Total_Eventos", "Eventos_Aderentes",
+                                  "Aderencia_Pct", "RAL_Count", "REC_Count", "TMA_Medio", "TMR_Medio"]
+                disp_cols_etit = [c for c in disp_cols_etit if c in disp_etit.columns]
+                tbl_etit = disp_etit[disp_cols_etit].copy()
+                tbl_etit.columns = [
+                    c.replace("Total_Eventos", "Eventos")
+                     .replace("Eventos_Aderentes", "Aderentes")
+                     .replace("Aderencia_Pct", "Aderência %")
+                     .replace("RAL_Count", "RAL")
+                     .replace("REC_Count", "REC")
+                     .replace("TMA_Medio", "TMA")
+                     .replace("TMR_Medio", "TMR")
+                    for c in disp_cols_etit
+                ]
+                tbl_etit = tbl_etit.reset_index(drop=True)
+                tbl_etit.index += 1
+                tbl_etit.index.name = "#"
+
+                styled_etit = tbl_etit.style.format(
+                    {"Aderência %": "{:.1f}", "TMA": "{:.4f}", "TMR": "{:.4f}"}, na_rep="—"
+                )
+                styled_etit = styled_etit.background_gradient(cmap="Purples", subset=["Eventos"])
+                if "Aderência %" in tbl_etit.columns and tbl_etit["Aderência %"].notna().any():
+                    styled_etit = styled_etit.background_gradient(
+                        cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100
+                    )
+                st.dataframe(styled_etit, use_container_width=True)
+
+                # Best/Worst cards
+                if len(tbl_etit) >= 2:
+                    best_etit = tbl_etit.iloc[0]
+                    worst_etit = tbl_etit.iloc[-1]
+                    best_ader_row = tbl_etit.sort_values("Aderência %", ascending=False).iloc[0] if "Aderência %" in tbl_etit.columns else None
+
+                    ce1, ce2, ce3 = st.columns(3)
+                    with ce1:
+                        st.markdown(f"""<div class="perf-card perf-best">
+                            <div class="p-title">🏆 Mais Eventos</div>
+                            <div class="p-name" style="color:#2ECC71;">{best_etit['Nome']}</div>
+                            <div class="p-detail">{best_etit['Eventos']:,.0f} eventos · Aderência: {best_etit.get('Aderência %', 0):.1f}%</div>
+                        </div>""", unsafe_allow_html=True)
+                    with ce2:
+                        st.markdown(f"""<div class="perf-card perf-worst">
+                            <div class="p-title">⚠️ Menos Eventos</div>
+                            <div class="p-name" style="color:#E74C3C;">{worst_etit['Nome']}</div>
+                            <div class="p-detail">{worst_etit['Eventos']:,.0f} eventos · Aderência: {worst_etit.get('Aderência %', 0):.1f}%</div>
+                        </div>""", unsafe_allow_html=True)
+                    with ce3:
+                        if best_ader_row is not None:
+                            st.markdown(f"""<div class="perf-card perf-dpa">
+                                <div class="p-title">📊 Melhor Aderência</div>
+                                <div class="p-name" style="color:#5DADE2;">{best_ader_row['Nome']}</div>
+                                <div class="p-detail">Aderência: {best_ader_row['Aderência %']:.1f}% · {best_ader_row['Eventos']:,.0f} eventos</div>
+                            </div>""", unsafe_allow_html=True)
+
+            # Bar chart — eventos por analista
+            st.markdown("")
+            if not resumo_etit.empty:
+                chart_etit = resumo_etit[["Nome", "Total_Eventos"]].copy()
+                chart_etit["Nome"] = chart_etit["Nome"].apply(primeiro_nome)
+                chart_etit = chart_etit.set_index("Nome").sort_values("Total_Eventos")
+                chart_etit.columns = ["Eventos"]
+                st.bar_chart(chart_etit, horizontal=True, color="#8E44AD", height=400)
+
+            # ---- Breakdowns ----
+            st.markdown("---")
+            st.markdown("##### 📊 Análises de Composição ETIT")
+
+            col_dem, col_tipo = st.columns(2)
+
+            with col_dem:
+                st.markdown("**Por Demanda (RAL/REC)**")
+                dem = etit_por_demanda(df_etit_filtrado)
+                if not dem.empty:
+                    dem["Aderência %"] = (dem["Aderentes"] / dem["Eventos"] * 100).round(1)
+                    dem["TMA_Medio"] = dem["TMA_Medio"].round(4)
+                    dem["TMR_Medio"] = dem["TMR_Medio"].round(4)
+                    st.dataframe(
+                        dem.rename(columns={"TMA_Medio": "TMA", "TMR_Medio": "TMR"})
+                           .style.format({"Aderência %": "{:.1f}", "TMA": "{:.4f}", "TMR": "{:.4f}"}, na_rep="—"),
+                        use_container_width=True, hide_index=True,
+                    )
+
+            with col_tipo:
+                st.markdown("**Por Tipo de Rede/Equipamento**")
+                tipo = etit_por_tipo(df_etit_filtrado)
+                if not tipo.empty:
+                    tipo["Aderência %"] = (tipo["Aderentes"] / tipo["Eventos"] * 100).round(1)
+                    st.dataframe(
+                        tipo.style
+                            .format({"Aderência %": "{:.1f}"}, na_rep="—")
+                            .background_gradient(cmap="Purples", subset=["Eventos"]),
+                        use_container_width=True, hide_index=True,
+                    )
+
+            col_causa, col_reg = st.columns(2)
+
+            with col_causa:
+                st.markdown("**Por Causa**")
+                causa = etit_por_causa(df_etit_filtrado)
+                if not causa.empty:
+                    causa["Aderência %"] = (causa["Aderentes"] / causa["Eventos"] * 100).round(1)
+                    st.dataframe(
+                        causa.head(15).style
+                            .format({"Aderência %": "{:.1f}"}, na_rep="—")
+                            .background_gradient(cmap="Purples", subset=["Eventos"]),
+                        use_container_width=True, hide_index=True,
+                    )
+
+            with col_reg:
+                st.markdown("**Por Regional**")
+                reg = etit_por_regional(df_etit_filtrado)
+                if not reg.empty:
+                    reg["Aderência %"] = (reg["Aderentes"] / reg["Eventos"] * 100).round(1)
+                    st.dataframe(
+                        reg.style
+                            .format({"Aderência %": "{:.1f}"}, na_rep="—")
+                            .background_gradient(cmap="Purples", subset=["Eventos"]),
+                        use_container_width=True, hide_index=True,
+                    )
+
+            # Por Turno
+            st.markdown("**Por Turno**")
+            turno = etit_por_turno(df_etit_filtrado)
+            if not turno.empty:
+                turno["Aderência %"] = (turno["Aderentes"] / turno["Eventos"] * 100).round(1)
+                col_t1, col_t2 = st.columns([1, 2])
+                with col_t1:
+                    st.dataframe(
+                        turno.style.format({"Aderência %": "{:.1f}"}, na_rep="—"),
+                        use_container_width=True, hide_index=True,
+                    )
+                with col_t2:
+                    chart_turno = turno[["Turno", "Eventos"]].set_index("Turno")
+                    st.bar_chart(chart_turno, color="#8E44AD", height=250)
+
+            # ---- Evolução Diária ETIT ----
+            st.markdown("---")
+            st.markdown("##### 📅 Evolução Diária ETIT")
+            daily_etit = etit_evolucao_diaria(df_etit_filtrado)
+            if not daily_etit.empty:
+                st.area_chart(daily_etit[["Data", "Eventos"]].set_index("Data"), color="#8E44AD", height=300)
+                st.line_chart(daily_etit[["Data", "Aderencia_Pct"]].set_index("Data"), color=COR_SUCESSO, height=250)
+
+            # ---- Dados Brutos ETIT ----
+            st.markdown("---")
+            st.markdown("##### 📋 Dados Brutos ETIT")
+            etit_show_cols = [
+                ETIT_COL_LOGIN, "Nome", "Setor", ETIT_COL_DEMANDA, ETIT_COL_NOTA,
+                ETIT_COL_STATUS, ETIT_COL_TIPO, ETIT_COL_CAUSA,
+                ETIT_COL_REGIONAL, ETIT_COL_CIDADE, ETIT_COL_UF,
+                ETIT_COL_TURNO, ETIT_COL_TMA, ETIT_COL_TMR,
+                ETIT_COL_DT_ACIONAMENTO, ETIT_COL_ANOMES,
+            ]
+            etit_show_cols = [c for c in etit_show_cols if c in df_etit_filtrado.columns]
+            st.dataframe(
+                df_etit_filtrado[etit_show_cols].sort_values(
+                    [ETIT_COL_DT_ACIONAMENTO] if ETIT_COL_DT_ACIONAMENTO in df_etit_filtrado.columns else ["Nome"],
+                    ascending=False,
+                ),
+                use_container_width=True, height=500,
+            )
+
+            csv_etit = df_etit_filtrado[etit_show_cols].to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📥 Baixar ETIT filtrado (CSV)",
+                csv_etit, "etit_por_evento_equipe.csv", "text/csv",
+            )
+
+
 # =====================================================
 # FOOTER
 # =====================================================
 st.markdown("---")
-st.caption(
-    f"Dashboard de Produtividade COP Rede · "
-    f"{len(df_filtrado)} registros · "
-    f"{n_analistas} analistas · "
+footer_parts = [
+    f"Dashboard de Produtividade COP Rede",
+    f"{len(df_filtrado)} registros",
+    f"{n_analistas} analistas",
     f"Dados de {data_min.strftime('%d/%m/%Y') if pd.notna(data_min) else '?'} "
-    f"a {data_max.strftime('%d/%m/%Y') if pd.notna(data_max) else '?'}"
-)
+    f"a {data_max.strftime('%d/%m/%Y') if pd.notna(data_max) else '?'}",
+]
+if etit_loaded:
+    footer_parts.append(f"ETIT: {len(df_etit_filtrado)} eventos")
+st.caption(" · ".join(footer_parts))
