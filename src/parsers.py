@@ -1,130 +1,127 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Optional, Iterable
-
 import pandas as pd
+from src.config import CHAT_TOA_NAME_PATTERNS
 
-from .config import (
-    CHAT_TOA_NAME_PATTERNS,
-    RES_ETIT_GPON_INDICADOR_NOME,
-    RES_LOG_REPROG_GPON_INDICADOR_NOME,
-    RES_SINTOMA_SEM_SINAL,
-)
 
-@dataclass
-class IndicadorResult:
-    indicador: str
-    df: pd.DataFrame  # colunas: Matricula, aderente, total, pct
+def _norm(s: str) -> str:
+    return str(s).strip().upper()
 
-def _safe_upper(s: pd.Series) -> pd.Series:
-    return s.astype(str).str.upper().str.strip()
 
-def _calc_pct(aderente: pd.Series, total: pd.Series) -> pd.Series:
-    return (aderente / total) * 100
-
-def parse_chat_toa_from_toa(planilha_toa_xlsx, equipe_ids: set[str]) -> Optional[IndicadorResult]:
+def find_col(df: pd.DataFrame, candidates):
     """
-    Tenta extrair o indicador 'Chat TOA' da planilha 'Analitico Indicadores TOA' (aba TOA).
-    Nem todos os meses vem esse indicador nessa planilha; por isso é 'best-effort'.
-    Esperado: colunas INDICADOR_NOME, INDICADOR (0/1), LOGIN.
+    Encontra coluna por "nome parecido", ignorando case e espaços.
+    candidates: lista de strings que podem existir no df.
     """
-    df = pd.read_excel(planilha_toa_xlsx, sheet_name="TOA")
-    required = {"INDICADOR_NOME", "INDICADOR", "LOGIN"}
-    if not required.issubset(set(df.columns)):
-        return None
+    cols = { _norm(c): c for c in df.columns }
+    for cand in candidates:
+        cand_norm = _norm(cand)
+        if cand_norm in cols:
+            return cols[cand_norm]
 
-    nome = _safe_upper(df["INDICADOR_NOME"])
-    mask = pd.Series(False, index=df.index)
-    for pat in CHAT_TOA_NAME_PATTERNS:
-        mask = mask | nome.str.contains(pat, na=False)
+    # fallback: contém substring
+    for real in df.columns:
+        r = _norm(real)
+        for cand in candidates:
+            if _norm(cand) in r:
+                return real
 
-    sub = df[mask].copy()
-    if sub.empty:
-        return None
+    return None
 
-    sub = sub[sub["LOGIN"].isin(equipe_ids)]
-    if sub.empty:
-        return None
 
-    g = sub.groupby("LOGIN").agg(total=("INDICADOR","size"), aderente=("INDICADOR","sum")).reset_index()
-    g["pct"] = _calc_pct(g["aderente"], g["total"])
-    g = g.rename(columns={"LOGIN":"Matricula"})
-    return IndicadorResult("Chat TOA", g[["Matricula","aderente","total","pct"]])
+def status_por_meta(valor_pct, meta, direcao):
+    if valor_pct is None or (isinstance(valor_pct, float) and pd.isna(valor_pct)):
+        return "—"
+    if direcao == "up":
+        return "✅ Dentro" if valor_pct >= meta else "❌ Fora"
+    return "✅ Dentro" if valor_pct <= meta else "❌ Fora"
 
-def parse_etit_outage_sem_sinal_gpon_from_residencial(planilha_residencial_xlsx, equipe_ids: set[str]) -> Optional[IndicadorResult]:
+
+def parse_chat_toa_from_df(df_toa: pd.DataFrame, equipe_ids: set) -> pd.DataFrame:
     """
-    ETIT Outage Sem Sinal (GPON) vem da planilha 'Analítico Indicadores Residencial' (aba Analitico).
-    Mapeamento adotado:
-      - INDICADOR_NOME_ICG == 'ETIT GPON'
-      - SINTOMA == 'INTERRUPCAO' (equivalente a Sem Sinal na maioria dos relatórios)
-      - % = aderente/total * 100 (INDICADOR=1 é aderente)
+    Esperado (TOA):
+    - Uma coluna com matrícula/login (ex.: LOGIN)
+    - Uma coluna com nome do indicador (ex.: INDICADOR_NOME)
+    - Uma coluna com aderência 0/1 (ex.: INDICADOR)
     """
-    df = pd.read_excel(planilha_residencial_xlsx, sheet_name="Analitico")
-    required = {"INDICADOR_NOME_ICG", "INDICADOR", "LOGIN_ACIONAMENTO", "SINTOMA"}
-    # Alguns relatórios usam RESPONSAVEL/LOGIN diferente; tentamos achar coluna de matrícula.
-    # Se não existir LOGIN_ACIONAMENTO, tenta 'RESPONSAVEL' ou 'LOGIN'.
-    if "LOGIN_ACIONAMENTO" not in df.columns:
-        for alt in ("RESPONSAVEL","LOGIN"):
-            if alt in df.columns:
-                df = df.rename(columns={alt:"LOGIN_ACIONAMENTO"})
-                break
+    login_col = find_col(df_toa, ["LOGIN", "MATRICULA", "MATRÍCULA", "USUARIO", "USUÁRIO"])
+    nome_col = find_col(df_toa, ["INDICADOR_NOME", "INDICADOR", "NOME_INDICADOR", "INDICADOR NOME"])
+    val_col = find_col(df_toa, ["INDICADOR", "VALOR", "RESULTADO", "ADERENCIA", "ADERÊNCIA"])
 
-    required = {"INDICADOR_NOME_ICG", "INDICADOR", "LOGIN_ACIONAMENTO", "SINTOMA"}
-    if not required.issubset(set(df.columns)):
-        return None
+    if not login_col or not nome_col or not val_col:
+        # não quebra: retorna vazio para aparecer na tabela como NaN
+        return pd.DataFrame({"Matricula": list(equipe_ids), "Chat_TOA_pct": [pd.NA] * len(equipe_ids)})
 
-    nome = _safe_upper(df["INDICADOR_NOME_ICG"])
-    sint = _safe_upper(df["SINTOMA"])
+    df = df_toa.copy()
+    df[login_col] = df[login_col].astype(str).str.strip()
+    df = df[df[login_col].isin(equipe_ids)]
 
-    sub = df[(nome == RES_ETIT_GPON_INDICADOR_NOME) & (sint == RES_SINTOMA_SEM_SINAL)].copy()
-    if sub.empty:
-        return None
+    # filtra registros que "parecem chat"
+    nome_norm = df[nome_col].astype(str).apply(_norm)
+    mask = nome_norm.apply(lambda x: any(p in x for p in CHAT_TOA_NAME_PATTERNS))
+    df = df[mask]
 
-    sub = sub[sub["LOGIN_ACIONAMENTO"].isin(equipe_ids)]
-    if sub.empty:
-        return None
+    if df.empty:
+        return pd.DataFrame({"Matricula": list(equipe_ids), "Chat_TOA_pct": [pd.NA] * len(equipe_ids)})
 
-    g = sub.groupby("LOGIN_ACIONAMENTO").agg(total=("INDICADOR","size"), aderente=("INDICADOR","sum")).reset_index()
-    g["pct"] = _calc_pct(g["aderente"], g["total"])
-    g = g.rename(columns={"LOGIN_ACIONAMENTO":"Matricula"})
-    return IndicadorResult("ETIT Outage Sem Sinal (GPON)", g[["Matricula","aderente","total","pct"]])
+    df[val_col] = pd.to_numeric(df[val_col], errors="coerce")
 
-def parse_log_reprog_gpon_from_residencial(planilha_residencial_xlsx, equipe_ids: set[str]) -> Optional[IndicadorResult]:
+    g = df.groupby(login_col).agg(total=(val_col, "size"), aderente=(val_col, "sum")).reset_index()
+    g["Chat_TOA_pct"] = (g["aderente"] / g["total"]) * 100
+    g = g.rename(columns={login_col: "Matricula"})
+    return g[["Matricula", "Chat_TOA_pct"]]
+
+
+def parse_gpon_from_residencial_df(df_res: pd.DataFrame, equipe_ids: set) -> pd.DataFrame:
     """
-    Log Outage Reprog. GPON (meta 10%, menor é melhor).
-    Na planilha residencial, normalmente:
-      - INDICADOR_NOME_ICG == 'LOG REPROGRAMAÇÃO GPON'
-      - SINTOMA == 'INTERRUPCAO' (sem sinal)
-    Para respeitar a direção (↓), aqui calculamos:
-      - pct = (% de NÃO ADERENTE) = (total - aderente)/total * 100
-    Assim, quanto menor o pct, melhor.
+    Esperado (Residencial - Analitico):
+    - login/matricula (LOGIN)
+    - nome do indicador (INDICADOR_NOME)
+    - valor 0/1 (INDICADOR)
+    - sintoma (SINTOMA) -> filtrar INTERRUPCAO (Sem sinal)
+    Indicadores:
+      - ETIT GPON
+      - LOG REPROGRAMAÇÃO GPON
+    Reprog: meta 10% menor é melhor -> calculamos % NÃO aderente (1 - aderente).
     """
-    df = pd.read_excel(planilha_residencial_xlsx, sheet_name="Analitico")
-    if "LOGIN_ACIONAMENTO" not in df.columns:
-        for alt in ("RESPONSAVEL","LOGIN"):
-            if alt in df.columns:
-                df = df.rename(columns={alt:"LOGIN_ACIONAMENTO"})
-                break
+    login_col = find_col(df_res, ["LOGIN", "MATRICULA", "MATRÍCULA", "USUARIO", "USUÁRIO", "LOGIN_ACIONAMENTO"])
+    nome_col = find_col(df_res, ["INDICADOR_NOME", "NOME_INDICADOR", "INDICADOR"])
+    val_col = find_col(df_res, ["INDICADOR", "VALOR", "RESULTADO", "ADERENCIA", "ADERÊNCIA"])
+    sint_col = find_col(df_res, ["SINTOMA", "SINTOMA_OUTAGE", "SINTOMA OUTAGE"])
 
-    required = {"INDICADOR_NOME_ICG", "INDICADOR", "LOGIN_ACIONAMENTO", "SINTOMA"}
-    if not required.issubset(set(df.columns)):
-        return None
+    if not login_col or not nome_col or not val_col:
+        return pd.DataFrame({"Matricula": list(equipe_ids), "ETIT_GPON_pct": [pd.NA]*len(equipe_ids), "REPROG_GPON_pct": [pd.NA]*len(equipe_ids)})
 
-    nome = _safe_upper(df["INDICADOR_NOME_ICG"])
-    sint = _safe_upper(df["SINTOMA"])
+    df = df_res.copy()
+    df[login_col] = df[login_col].astype(str).str.strip()
+    df = df[df[login_col].isin(equipe_ids)]
+    df[val_col] = pd.to_numeric(df[val_col], errors="coerce")
 
-    sub = df[(nome == RES_LOG_REPROG_GPON_INDICADOR_NOME) & (sint == RES_SINTOMA_SEM_SINAL)].copy()
-    if sub.empty:
-        return None
+    # Filtrar sintoma interrupção (se existir coluna)
+    if sint_col:
+        s = df[sint_col].astype(str).apply(_norm)
+        df = df[s.str.contains("INTERRUP", na=False)]  # pega INTERRUPCAO / INTERRUPÇÃO
 
-    sub = sub[sub["LOGIN_ACIONAMENTO"].isin(equipe_ids)]
-    if sub.empty:
-        return None
+    # helpers
+    def pct_aderente(indicador_substring: str):
+        sub = df[df[nome_col].astype(str).apply(_norm).str.contains(indicador_substring, na=False)]
+        if sub.empty:
+            return pd.DataFrame(columns=["Matricula", "pct"])
+        g = sub.groupby(login_col).agg(total=(val_col, "size"), aderente=(val_col, "sum")).reset_index()
+        g["pct"] = (g["aderente"] / g["total"]) * 100
+        g = g.rename(columns={login_col: "Matricula"})
+        return g[["Matricula", "pct"]]
 
-    g = sub.groupby("LOGIN_ACIONAMENTO").agg(total=("INDICADOR","size"), aderente=("INDICADOR","sum")).reset_index()
-    g["nao_aderente"] = g["total"] - g["aderente"]
-    g["pct"] = _calc_pct(g["nao_aderente"], g["total"])
-    g = g.rename(columns={"LOGIN_ACIONAMENTO":"Matricula"})
-    # manter colunas padrão: aderente, total, pct (aqui 'aderente' vira "não reprogramou" se sua regra for essa)
-    return IndicadorResult("Log Outage Reprog. GPON", g[["Matricula","aderente","total","pct"]])
+    # ETIT GPON
+    etit = pct_aderente("ETIT GPON").rename(columns={"pct": "ETIT_GPON_pct"})
+
+    # LOG REPROGRAMAÇÃO GPON
+    # Queremos % de reprog (não aderente), então: 100 - %aderente
+    rep = pct_aderente("LOG REPROGR").rename(columns={"pct": "aderente_pct"})
+    if not rep.empty:
+        rep["REPROG_GPON_pct"] = 100 - rep["aderente_pct"]
+        rep = rep[["Matricula", "REPROG_GPON_pct"]]
+    else:
+        rep = pd.DataFrame(columns=["Matricula", "REPROG_GPON_pct"])
+
+    out = pd.DataFrame({"Matricula": list(equipe_ids)})
+    out = out.merge(etit, on="Matricula", how="left").merge(rep, on="Matricula", how="left")
+    return out
