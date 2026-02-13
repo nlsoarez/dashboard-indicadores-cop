@@ -96,6 +96,56 @@ st.markdown("""
     /* Table styling */
     .dataframe { font-size: 0.85rem !important; }
 
+    /* Performance highlight cards */
+    .perf-card {
+        padding: 0.9rem 1rem;
+        border-radius: 10px;
+        border-left: 4px solid;
+        margin-bottom: 0.5rem;
+    }
+    .perf-best {
+        background: linear-gradient(135deg, #d5f5e3 0%, #abebc6 100%);
+        border-left-color: #27AE60;
+    }
+    .perf-worst {
+        background: linear-gradient(135deg, #fadbd8 0%, #f5b7b1 100%);
+        border-left-color: #E74C3C;
+    }
+    .perf-dpa {
+        background: linear-gradient(135deg, #d6eaf8 0%, #aed6f1 100%);
+        border-left-color: #2980B9;
+    }
+
+    /* Insight cards */
+    .insight-card {
+        background: white;
+        border-radius: 10px;
+        padding: 0.9rem 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        margin-bottom: 0.6rem;
+        border-left: 4px solid #2980B9;
+    }
+    .tag-green {
+        background: #d5f5e3; color: #1e8449;
+        padding: 1px 7px; border-radius: 10px;
+        font-size: 0.75rem; display: inline-block; margin: 1px 2px;
+    }
+    .tag-red {
+        background: #fadbd8; color: #922b21;
+        padding: 1px 7px; border-radius: 10px;
+        font-size: 0.75rem; display: inline-block; margin: 1px 2px;
+    }
+    .sector-badge {
+        background: #eaf2f8; color: #2c3e50;
+        padding: 1px 7px; border-radius: 8px;
+        font-size: 0.72rem; margin-left: 6px;
+    }
+    .rank-pill {
+        background: #f0f0f0; color: #555;
+        padding: 1px 7px; border-radius: 8px;
+        font-size: 0.72rem; margin-left: 3px;
+    }
+
     /* Sidebar */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #1B4F72 0%, #154360 100%);
@@ -402,20 +452,182 @@ with tab1:
         chart_data = rank_media[["Nome", "Media_Diaria"]].set_index("Nome").sort_values("Media_Diaria")
         st.bar_chart(chart_data, horizontal=True, color=COR_PRIMARIA, height=500)
 
-        # Detalhamento de volumes por analista
-        sector_vol = get_sector_vol_cols(setor_selecionado, resumo.columns)
-        if sector_vol:
-            st.markdown("#### 📋 Detalhamento de Volumes por Analista")
-            vol_detail = resumo[[COL_NOME, "Setor"] + list(sector_vol.keys())].copy()
-            vol_detail["Nome"] = vol_detail[COL_NOME].apply(primeiro_nome)
-            vol_detail = vol_detail[["Nome", "Setor"] + list(sector_vol.keys())].copy()
-            rename_map = {k: v for k, v in sector_vol.items()}
-            vol_detail = vol_detail.rename(columns=rename_map)
-            vol_detail = vol_detail.rename(columns={"Nome": "Analista"})
-            vol_detail = vol_detail.sort_values("Analista").reset_index(drop=True)
-            vol_detail.index = vol_detail.index + 1
-            vol_detail.index.name = "#"
-            st.dataframe(vol_detail, use_container_width=True, height=500)
+        # ================================================
+        # ANÁLISE DETALHADA POR SETOR
+        # ================================================
+        st.markdown("---")
+        st.markdown("#### 📋 Análise Detalhada por Setor")
+
+        sectors_to_show = []
+        if setor_selecionado in ("Todos", "RESIDENCIAL"):
+            sectors_to_show.append(("RESIDENCIAL", VOL_COLS_RESIDENCIAL, "🏠", "Blues"))
+        if setor_selecionado in ("Todos", "EMPRESARIAL"):
+            sectors_to_show.append(("EMPRESARIAL", VOL_COLS_EMPRESARIAL, "🏢", "Oranges"))
+
+        for sector_name, sector_specific_vol, sector_icon, sector_cmap in sectors_to_show:
+            df_sector = resumo[resumo["Setor"] == sector_name].copy()
+            if df_sector.empty:
+                continue
+
+            all_vol = {**sector_specific_vol, **VOL_COLS_AMBOS}
+            vol_keys = [k for k in all_vol if k in df_sector.columns]
+
+            st.markdown(f"##### {sector_icon} {sector_name}")
+
+            # Build table with comparison metrics
+            base = [COL_NOME, COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria", "DPA_Media"]
+            base_avail = [c for c in base if c in df_sector.columns]
+            detail = df_sector[base_avail + vol_keys].copy()
+            detail["Nome"] = detail[COL_NOME].apply(primeiro_nome)
+
+            avg_vol = detail[COL_VOL_TOTAL].mean()
+            detail["vs Média"] = ((detail[COL_VOL_TOTAL] / avg_vol - 1) * 100).round(1) if avg_vol > 0 else 0.0
+
+            disp_cols = ["Nome", COL_VOL_TOTAL, "Dias_Trabalhados", "Media_Diaria", "vs Média", "DPA_Media"] + vol_keys
+            disp_cols = [c for c in disp_cols if c in detail.columns]
+            disp = detail[disp_cols].copy()
+
+            rename = {
+                "Nome": "Analista", COL_VOL_TOTAL: "Vol. Total",
+                "Dias_Trabalhados": "Dias", "Media_Diaria": "Média/Dia",
+                "DPA_Media": "DPA %",
+            }
+            rename.update({k: all_vol[k] for k in vol_keys})
+            disp = disp.rename(columns=rename)
+            disp = disp.sort_values("Vol. Total", ascending=False).reset_index(drop=True)
+            disp.index += 1
+            disp.index.name = "#"
+
+            # Style the table
+            fmt = {"DPA %": "{:.1f}", "Média/Dia": "{:.1f}", "vs Média": "{:+.1f}"}
+            styled = disp.style.format(fmt, na_rep="—")
+            styled = styled.background_gradient(cmap=sector_cmap, subset=["Vol. Total"])
+            if disp["vs Média"].notna().any():
+                styled = styled.background_gradient(cmap="RdYlGn", subset=["vs Média"], vmin=-50, vmax=50)
+            if "DPA %" in disp.columns and disp["DPA %"].notna().any():
+                styled = styled.background_gradient(cmap="RdYlGn", subset=["DPA %"], vmin=50, vmax=100)
+            for vl in [all_vol[k] for k in vol_keys]:
+                if vl in disp.columns and disp[vl].notna().any():
+                    styled = styled.background_gradient(cmap=sector_cmap, subset=[vl])
+
+            st.dataframe(styled, use_container_width=True)
+
+            # Best / Worst performer cards
+            if len(disp) >= 2:
+                best = disp.iloc[0]
+                worst = disp.iloc[-1]
+                best_dpa_row = None
+                if "DPA %" in disp.columns:
+                    dpa_valid = disp.dropna(subset=["DPA %"])
+                    if not dpa_valid.empty:
+                        best_dpa_row = dpa_valid.sort_values("DPA %", ascending=False).iloc[0]
+
+                c_best, c_worst, c_dpa = st.columns(3)
+                with c_best:
+                    st.markdown(f"""<div class="perf-card perf-best">
+                        <strong>🏆 Maior Volume</strong><br>
+                        <span style="font-size:1.15rem;font-weight:700;color:#1e8449;">{best['Analista']}</span><br>
+                        <span style="font-size:0.82rem;">Vol: {best['Vol. Total']:,.0f} · Média: {best['Média/Dia']:.1f}/dia</span>
+                    </div>""", unsafe_allow_html=True)
+                with c_worst:
+                    st.markdown(f"""<div class="perf-card perf-worst">
+                        <strong>⚠️ Menor Volume</strong><br>
+                        <span style="font-size:1.15rem;font-weight:700;color:#922b21;">{worst['Analista']}</span><br>
+                        <span style="font-size:0.82rem;">Vol: {worst['Vol. Total']:,.0f} · Média: {worst['Média/Dia']:.1f}/dia</span>
+                    </div>""", unsafe_allow_html=True)
+                with c_dpa:
+                    if best_dpa_row is not None:
+                        st.markdown(f"""<div class="perf-card perf-dpa">
+                            <strong>📊 Melhor DPA</strong><br>
+                            <span style="font-size:1.15rem;font-weight:700;color:#1b4f72;">{best_dpa_row['Analista']}</span><br>
+                            <span style="font-size:0.82rem;">DPA: {best_dpa_row['DPA %']:.1f}%</span>
+                        </div>""", unsafe_allow_html=True)
+
+            st.markdown("")
+
+        # ================================================
+        # INSIGHTS POR ANALISTA
+        # ================================================
+        st.markdown("---")
+        st.markdown("#### 💡 Insights — Pontos Fortes e Oportunidades")
+
+        insights_data = []
+        for _, row in resumo.sort_values(COL_VOL_TOTAL, ascending=False).iterrows():
+            nome = primeiro_nome(row[COL_NOME])
+            setor = row["Setor"]
+            peers = resumo[resumo["Setor"] == setor]
+            n_peers = len(peers)
+            if n_peers < 2:
+                continue
+
+            if setor == "RESIDENCIAL":
+                relevant = {**VOL_COLS_RESIDENCIAL, **VOL_COLS_AMBOS}
+            else:
+                relevant = {**VOL_COLS_EMPRESARIAL, **VOL_COLS_AMBOS}
+            vol_keys_r = [k for k in relevant if k in resumo.columns]
+
+            strengths = []
+            weaknesses = []
+            for k in vol_keys_r:
+                val = row.get(k, 0)
+                if pd.isna(val) or val == 0:
+                    continue
+                rank = int((peers[k].fillna(0) > val).sum() + 1)
+                if rank == 1:
+                    strengths.append(relevant[k])
+                elif rank >= n_peers:
+                    weaknesses.append(relevant[k])
+
+            avg_vol = peers[COL_VOL_TOTAL].mean()
+            vol_diff = ((row[COL_VOL_TOTAL] / avg_vol - 1) * 100) if avg_vol > 0 else 0
+            vol_rank = int((peers[COL_VOL_TOTAL].fillna(0) > row[COL_VOL_TOTAL]).sum() + 1)
+
+            dpa_val = row.get("DPA_Media", None)
+
+            insights_data.append({
+                "nome": nome, "setor": setor,
+                "vol_total": row[COL_VOL_TOTAL],
+                "vol_diff": vol_diff, "vol_rank": vol_rank,
+                "dpa": dpa_val,
+                "strengths": strengths[:4],
+                "weaknesses": weaknesses[:4],
+                "n_peers": n_peers,
+            })
+
+        col_left, col_right = st.columns(2)
+        for i, ins in enumerate(insights_data):
+            target_col = col_left if i % 2 == 0 else col_right
+            vol_color = "#27AE60" if ins["vol_diff"] >= 0 else "#E74C3C"
+            vol_icon = "▲" if ins["vol_diff"] >= 0 else "▼"
+            border = "#27AE60" if ins["vol_diff"] >= 10 else ("#E74C3C" if ins["vol_diff"] < -10 else "#2980B9")
+            dpa_str = f"{ins['dpa']:.1f}%" if pd.notna(ins["dpa"]) else "—"
+
+            str_tags = "".join(f'<span class="tag-green">{s}</span>' for s in ins["strengths"])
+            weak_tags = "".join(f'<span class="tag-red">{w}</span>' for w in ins["weaknesses"])
+            if not str_tags:
+                str_tags = '<span style="color:#aaa;font-size:0.75rem;">—</span>'
+            if not weak_tags:
+                weak_tags = '<span style="color:#aaa;font-size:0.75rem;">—</span>'
+
+            with target_col:
+                st.markdown(f"""<div class="insight-card" style="border-left-color:{border};">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <strong>{ins['nome']}</strong>
+                            <span class="sector-badge">{ins['setor'][:3]}</span>
+                            <span class="rank-pill">#{ins['vol_rank']}/{ins['n_peers']}</span>
+                        </div>
+                        <div style="text-align:right;">
+                            <span style="font-weight:700;">{ins['vol_total']:,.0f}</span>
+                            <span style="color:{vol_color};font-size:0.82rem;margin-left:3px;">{vol_icon}{abs(ins['vol_diff']):.0f}%</span>
+                            <span style="color:#7f8c8d;font-size:0.78rem;margin-left:6px;">DPA:{dpa_str}</span>
+                        </div>
+                    </div>
+                    <div style="margin-top:0.4rem;">
+                        <span style="font-size:0.78rem;color:#555;">Forte:</span> {str_tags}
+                        <span style="font-size:0.78rem;color:#555;margin-left:8px;">Atenção:</span> {weak_tags}
+                    </div>
+                </div>""", unsafe_allow_html=True)
 
 
 # ---- TAB 2: EVOLUÇÃO DIÁRIA ----
