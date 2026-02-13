@@ -1,58 +1,53 @@
-# Dashboard de Indicadores (Upload de Planilhas)
+# 📊 Dashboard de Produtividade — COP Rede
 
-Este projeto cria um dashboard simples (Streamlit) para:
-- Fazer upload das planilhas
-- Extrair os indicadores por **matrícula** (somente sua equipe)
-- Comparar automaticamente com as **metas**
-- Exibir tabela, alertas e ranking
+Dashboard Streamlit para análise de produtividade da equipe COP Rede.
+Basta fazer upload da planilha **Produtividade COP Rede - Analítico** e o sistema filtra automaticamente os dados dos seus analistas.
 
-## Indicadores implementados (neste repo)
-- **Chat TOA** (best-effort na planilha TOA — usa padrões de texto; se o mês não vier com o indicador, ele não aparece)
-- **ETIT Outage Sem Sinal (GPON)** (planilha Residencial)
-- **Log Outage Reprog. GPON** (planilha Residencial; meta 10%, menor é melhor)
+## Funcionalidades
 
-> Se você quiser, dá pra plugar os demais indicadores no mesmo padrão criando novos parsers em `src/parsers.py`.
+- **Upload único** — suba a planilha e os dados são processados automaticamente
+- **Filtros** — por mês, setor (Empresarial/Residencial) e analista individual
+- **KPIs** — Volume Total, Analistas Ativos, Média por Analista, DPA (Ocupação)
+- **Rankings** — Volume Total, Média Diária, DPA
+- **Evolução diária** — gráficos de volume e produtividade ao longo do tempo
+- **Composição de volume** — breakdown por tipo de atividade (NM, SGO, OSS, RAL, TOA, Telefonia etc.)
+- **Visão individual** — selecione um analista para ver seus dados em detalhe
+- **Export CSV** — baixe os dados filtrados
 
----
+## Equipe monitorada
 
-## Como rodar local
+**Empresarial (13):** Leandro, Bruno, Igor, Sandro, Gabriela, Magno, Fernanda, Jefferson, Roberto, Aldenes, Rodrigo, Suellen, Monica
 
-### 1) Criar venv e instalar
+**Residencial (8):** Marley, Kelly, Thiago, Leonardo, Maristella, Cristiane, Alan, Raissa
+
+## Como rodar
+
 ```bash
+# Criar venv
 python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# Linux/Mac:
-source .venv/bin/activate
+source .venv/bin/activate  # Linux/Mac
+# .venv\Scripts\activate   # Windows
 
+# Instalar dependências
 pip install -r requirements.txt
-```
 
-### 2) Rodar
-```bash
+# Rodar
 streamlit run app.py
 ```
 
-### 3) Upload das planilhas
-Na tela, faça upload de:
-- **Analitico Indicadores TOA** (aba `TOA`)
-- **Analítico Indicadores Residencial** (aba `Analitico`)
+## Estrutura
 
-Clique em **Processar Dados**.
+```
+├── app.py                 # Dashboard principal
+├── src/
+│   ├── config.py          # Equipe, colunas, configurações
+│   └── processors.py      # Lógica de processamento dos dados
+├── requirements.txt
+└── README.md
+```
 
----
+## Ajustes
 
-## Estrutura do projeto
-- `app.py` → dashboard (UI)
-- `src/config.py` → equipe, metas e padrões
-- `src/parsers.py` → regras de extração dos indicadores
-- `data/` → pasta vazia (caso queira colocar exemplos)
-
----
-
-## Ajustes rápidos (se mudar o nome do indicador)
-Em `src/config.py`, altere:
-- `CHAT_TOA_NAME_PATTERNS`
-- `RES_ETIT_GPON_INDICADOR_NOME`
-- `RES_LOG_REPROG_GPON_INDICADOR_NOME`
-- `RES_SINTOMA_SEM_SINAL`
+- Para alterar a equipe, edite `EQUIPE` em `src/config.py`
+- Para alterar a linha do header da planilha, edite `HEADER_ROW` em `src/config.py`
+- Os nomes das abas aceitas estão em `SHEET_NAME_CANDIDATES`
