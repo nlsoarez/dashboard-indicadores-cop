@@ -368,7 +368,18 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
   if (!sheetData || !sheetData.length) return {consolidated: null, byAnalyst: {}};
   
   var headers = Object.keys(sheetData[0]);
-  console.log("extractIndicatorData -", "Total headers:", headers.length);
+  console.log("extractIndicatorData - Total headers:", headers.length);
+  console.log("Todos os headers:", headers);
+  
+  // LOG: Mostra amostra de dados para DEBUG
+  for (var logH = 0; logH < headers.length; logH++) {
+    var h = headers[logH];
+    var sample = [];
+    for (var logR = 0; logR < Math.min(3, sheetData.length); logR++) {
+      sample.push(sheetData[logR][h]);
+    }
+    console.log("  Col", logH, "(" + h + "):", sample);
+  }
   
   // Primeiro, acha coluna de VALOR (percentuais 0-100)
   var valueCol = findValueColumn(headers, sheetData, indicatorKeywords);
@@ -380,20 +391,25 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
     // Procura coluna com texto que não seja a coluna de valor
     for (var i = 0; i < headers.length; i++) {
       var h = headers[i];
-      // Pula colunas vazias e a coluna de valor
+      // Pula colunas vazias e a coluna de valor (E colunas que parecem valores duplicados)
       if (h.indexOf("__EMPTY") !== -1 || h === valueCol) continue;
+      if (h.indexOf(valueCol) !== -1 && h !== valueCol) continue; // Pula colunas duplicadas da coluna de valor
       
       // Verifica se essa coluna tem texto (possíveis nomes/logins)
       var hasText = false;
+      var hasNumbers = true;
       for (var j = 0; j < Math.min(sheetData.length, 5); j++) {
         var val = sheetData[j][h];
-        if (val && String(val).trim().length > 0 && isNaN(parseFloat(val))) {
-          hasText = true;
-          break;
-        }
+        if (!val || String(val).trim().length === 0) continue;
+        
+        var isNum = !isNaN(parseFloat(val));
+        var isText = String(val).trim().length > 0 && !isNum;
+        
+        if (isText) hasText = true;
+        if (!isNum) hasNumbers = false;
       }
       
-      if (hasText) {
+      if (hasText && !hasNumbers) {
         loginCol = h;
         console.log("LoginCol encontrada (por texto):", loginCol);
         break;
@@ -407,7 +423,7 @@ function extractIndicatorData(sheetData, indicatorKeywords) {
     console.log("LoginCol encontrada (padrão):", loginCol);
   }
   
-  console.log("extractIndicatorData -", "Headers:", headers.length, "LoginCol:", loginCol, "ValueCol:", valueCol);
+  console.log("extractIndicatorData - Headers:", headers.length, "LoginCol:", loginCol, "ValueCol:", valueCol);
   
   var result = {consolidated: null, byAnalyst: {}};
   var allValues = [];
