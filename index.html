@@ -1,275 +1,71 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Indicadores COP Rede - Equipe Nelson Soares</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#1a1a2e;color:#fff;min-height:100vh}
-    .header{background:linear-gradient(135deg,#e50914,#b20710);padding:20px 30px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 4px 15px rgba(0,0,0,.3)}
-    .header h1{font-size:1.5em;font-weight:700}
-    .header .info{font-size:.85em;opacity:.9}
-    .container{max-width:1400px;margin:0 auto;padding:20px}
-    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:20px 0}
-    .kpi-card{background:linear-gradient(145deg,#16213e,#1a1a2e);border-radius:12px;padding:20px;border:1px solid #2a2a4a;transition:transform .2s}
-    .kpi-card:hover{transform:translateY(-3px);border-color:#e50914}
-    .kpi-card .label{font-size:.75em;color:#aaa;text-transform:uppercase;letter-spacing:1px}
-    .kpi-card .value{font-size:2em;font-weight:700;margin:8px 0;color:#e50914}
-    .kpi-card .target{font-size:.8em;color:#888}
-    .kpi-card.green .value{color:#00c853}
-    .kpi-card.yellow .value{color:#ffc107}
-    .section{margin:30px 0}
-    .section h2{font-size:1.3em;margin-bottom:15px;padding-bottom:8px;border-bottom:2px solid #e50914;display:inline-block}
-    .tabs{display:flex;gap:5px;margin:15px 0}
-    .tab{padding:10px 20px;background:#16213e;border:1px solid #2a2a4a;border-radius:8px 8px 0 0;cursor:pointer;font-size:.85em;color:#aaa;transition:all .2s}
-    .tab.active{background:#e50914;color:#fff;border-color:#e50914}
-    .tab:hover{color:#fff}
-    .tab-content{display:none;background:#16213e;border-radius:0 12px 12px 12px;padding:20px;border:1px solid #2a2a4a}
-    .tab-content.active{display:block}
-    table{width:100%;border-collapse:collapse;font-size:.85em}
-    th{background:#0f3460;padding:12px 15px;text-align:left;font-weight:600;text-transform:uppercase;font-size:.75em;letter-spacing:1px;color:#e50914}
-    td{padding:10px 15px;border-bottom:1px solid #2a2a4a}
-    tr:hover td{background:rgba(229,9,20,.05)}
-    .badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.75em;font-weight:600}
-    .badge-green{background:rgba(0,200,83,.15);color:#00c853}
-    .badge-red{background:rgba(229,9,20,.15);color:#e50914}
-    .badge-yellow{background:rgba(255,193,7,.15);color:#ffc107}
-    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-    .chart-placeholder{background:#16213e;border-radius:12px;padding:20px;border:1px solid #2a2a4a;text-align:center;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center}
-    .bar-chart{display:flex;align-items:flex-end;gap:8px;height:150px;margin-top:15px}
-    .bar{width:40px;background:linear-gradient(to top,#e50914,#ff6b6b);border-radius:4px 4px 0 0;position:relative;transition:height .5s}
-    .bar span{position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:.7em;white-space:nowrap}
-    .bar .name{position:absolute;bottom:-25px;left:50%;transform:translateX(-50%) rotate(-45deg);font-size:.6em;white-space:nowrap;color:#aaa}
-    .indicator-card{background:#16213e;border-radius:12px;padding:20px;border:1px solid #2a2a4a;margin:10px 0}
-    .indicator-card h3{color:#e50914;margin-bottom:5px;font-size:1em}
-    .indicator-card .desc{color:#888;font-size:.8em;margin-bottom:10px}
-    .flex-between{display:flex;justify-content:space-between;align-items:center}
-    .footer{text-align:center;padding:30px;color:#555;font-size:.8em;border-top:1px solid #2a2a4a;margin-top:40px}
-    @media(max-width:768px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}}
-    </style>
-  </head>
-  <body>
-    <div class="header">
-      <div>
-        <h1>Dashboard Indicadores COP Rede</h1>
-      <div class="info">Equipe Nelson Soares | COP REDE RJ | Semana 02 a 08/12/2026</div>
-      </div>
-    <div style="text-align:right">
-    <div class="info">Dados Atualizados: 12/02/2026</div>
-    <div class="info">Periodo: Fev/2026</div>
-    </div>
-    </div>
-  
-  <div class="container">
-  
-  <div class="kpi-grid">
-  <div class="kpi-card green">
-  <div class="label">DPA Ocupacao - Empresarial</div>
-  <div class="value">92.6%</div>
-  <div class="target">Meta: 90% | Status: ACIMA</div>
-  </div>
-  <div class="kpi-card green">
-  <div class="label">DPA Ocupacao - Residencial</div>
-  <div class="value">90.19%</div>
-  <div class="target">Meta: 90% | Status: ATINGIDO</div>
-  </div>
-  <div class="kpi-card green">
-  <div class="label">Chat TOA - Interacao 10min</div>
-  <div class="value">89.0%</div>
-  <div class="target">Meta: 85% | Status: ACIMA</div>
-  </div>
-  <div class="kpi-card">
-  <div class="label">ETIT Por Evento - Empresarial</div>
-  <div class="value">90.2%</div>
-  <div class="target">COP Rede RJ - Rio e ES</div>
-  </div>
-  </div>
-  
-  <div class="kpi-grid">
-  <div class="kpi-card">
-  <div class="label">ETIT Por Evento RAL</div>
-  <div class="value">91.4%</div>
-  <div class="target">Tarefas direcionadas em ate 30min</div>
-  </div>
-  <div class="kpi-card">
-  <div class="label">ETIT Por Evento REC</div>
-  <div class="value">88.6%</div>
-  <div class="target">Tarefas direcionadas em ate 30min</div>
-  </div>
-  <div class="kpi-card">
-  <div class="label">ETIT Outage Sem Sinal GPON</div>
-  <div class="value">85.7%</div>
-  <div class="target">Vol. Dentro Prazo DP / Vol. Total</div>
-  </div>
-  <div class="kpi-card yellow">
-  <div class="label">Log Outage Reprog. GPON</div>
-  <div class="value">12.3%</div>
-  <div class="target">% Outages Reprogramados</div>
-  </div>
-  </div>
-  
-  <div class="section">
-  <h2>Indicadores por Analista</h2>
-  
-  <div class="tabs">
-  <div class="tab active" onclick="showTab('empresarial')">EMPRESARIAL</div>
-  <div class="tab" onclick="showTab('residencial')">RESIDENCIAL</div>
-  <div class="tab" onclick="showTab('consolidado')">CONSOLIDADO</div>
-  </div>
-  
-  <div class="tab-content active" id="empresarial">
-  <table>
-    <thead>
-      <tr><th>Matricula</th><th>Analista</th><th>DPA %</th><th>Chat TOA %</th><th>ETIT RAL %</th><th>ETIT REC %</th><th>ETIT Outage GPON %</th><th>Status</th></tr>
-    </thead>
-  <tbody>
-    <tr><td>N6088107</td><td>LEANDRO GONCALVES DE CARVALHO</td><td>95.9</td><td>92.1</td><td>94.5</td><td>93.2</td><td>88.7</td><td><span class="badge badge-green">Destaque</span>span></td></tr>
-  <tr><td>N5619600</td>td><td>BRUNO COSTA BUCARD</td>td><td>94.2</td>td><td>91.5</td>td><td>93.8</td>td><td>91.7</td>td><td>87.3</td>td><td><span class="badge badge-green">Destaque</span>span></td>td></tr>
-  <tr><td>N5737414</td><td>SANDRO DA SILVA CARVALHO</td><td>93.5</td><td>90.8</td><td>92.1</td><td>90.4</td><td>86.9</td><td><span class="badge badge-green">Destaque</span>span></td></tr>
-  <tr><td>N0189105</td>td><td>IGOR MARCELINO DE MARINS</td>td><td>92.8</td>td><td>89.7</td>td><td>91.5</td>td><td>89.8</td>td><td>85.4</td>td><td><span class="badge badge-green">OK</span>span></td>td></tr>
-  <tr><td>N5713690</td><td>GABRIELA TAVARES DA SILVA</td><td>92.1</td><td>88.9</td><td>90.7</td><td>88.5</td><td>84.2</td><td><span class="badge badge-green">OK</span>span></td></tr>
-  <tr><td>N5802257</td>td><td>MAGNO FERRAREZ DE MORAIS</td>td><td>91.1</td>td><td>88.2</td>td><td>89.4</td>td><td>87.6</td>td><td>83.8</td>td><td><span class="badge badge-green">OK</span>span></td>td></tr>
-  <tr><td>F201714</td><td>FERNANDA MESQUITA DE FREITAS</td><td>90.4</td><td>87.5</td><td>88.9</td><td>86.3</td><td>82.5</td><td><span class="badge badge-green">OK</span>span></td></tr>
-  <tr><td>N6173055</td>td><td>JEFFERSON LUIS G. COITINHO</td>td><td>89.5</td>td><td>86.8</td>td><td>87.6</td>td><td>85.1</td>td><td>81.9</td>td><td><span class="badge badge-yellow">Atencao</span>span></td>td></tr>
-  <tr><td>N0125317</td><td>ROBERTO SILVA DO NASCIMENTO</td><td>88.7</td><td>85.4</td><td>86.2</td><td>84.7</td><td>80.3</td><td><span class="badge badge-yellow">Atencao</span>span></td></tr>
-  <tr><td>F218860</td>td><td>ALDENES MARQUES I. DA SILVA</td>td><td>87.9</td>td><td>84.6</td>td><td>85.8</td>td><td>83.2</td>td><td>79.8</td>td><td><span class="badge badge-yellow">Atencao</span>span></td>td></tr>
-  <tr><td>N5819183</td><td>RODRIGO PIRES BERNARDINO</td><td>89.1</td><td>86.1</td><td>87.3</td><td>85.9</td><td>82.1</td><td><span class="badge badge-yellow">Atencao</span>span></td></tr>
-  <tr><td>N5926003</td>td><td>SUELLEN HERNANDEZ DA SILVA</td>td><td>88.7</td>td><td>85.7</td>td><td>86.9</td>td><td>84.5</td>td><td>81.4</td>td><td><span class="badge badge-yellow">Atencao</span>span></td>td></tr>
-  <tr><td>N5932064</td><td>MONICA DA SILVA RODRIGUES</td><td>87.3</td><td>84.2</td><td>85.4</td><td>83.8</td><td>80.6</td><td><span class="badge badge-yellow">Atencao</span>span></td></tr>
-  </tbody>
-  </table>
-  </div>
-  
-  <div class="tab-content" id="residencial">
-  <table>
-  <thead>
-  <tr><th>Matricula</th><th>Analista</th><th>DPA %</th><th>Chat TOA %</th><th>ETIT RAL %</th><th>ETIT REC %</th><th>ETIT Outage GPON %</th><th>Status</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>N0238475</td><td>MARLEY MARQUES RIBEIRO</td><td>93.2</td><td>91.4</td><td>92.8</td><td>91.5</td><td>87.6</td><td><span class="badge badge-green">Destaque</span>span></td></tr>
-  <tr><td>N5923221</td>td><td>KELLY PINHEIRO LIRA</td>td><td>92.5</td>td><td>90.7</td>td><td>91.9</td>td><td>90.8</td>td><td>86.3</td>td><td><span class="badge badge-green">Destaque</span>span></td>td></tr>
-  <tr><td>N5772086</td><td>THIAGO PEREIRA DA SILVA</td><td>91.8</td><td>89.5</td><td>91.2</td><td>89.7</td><td>85.8</td><td><span class="badge badge-green">OK</span>span></td></tr>
-  <tr><td>N0239871</td>td><td>LEONARDO FERREIRA L. DE ALMEIDA</td>td><td>90.7</td>td><td>88.9</td>td><td>90.4</td>td><td>88.6</td>td><td>84.5</td>td><td><span class="badge badge-green">OK</span>span></td>td></tr>
-  <tr><td>N5577565</td><td>MARISTELLA MARCIA DOS SANTOS</td><td>89.8</td><td>87.6</td><td>89.1</td><td>87.4</td><td>83.2</td><td><span class="badge badge-green">OK</span>span></td></tr>
-  <tr><td>N5972428</td>td><td>CRISTIANE HERMOGENES DA SILVA</td>td><td>88.5</td>td><td>86.3</td>td><td>88.5</td>td><td>86.1</td>td><td>82.7</td>td><td><span class="badge badge-yellow">Atencao</span>span></td>td></tr>
-  <tr><td>N4014011</td><td>ALAN MARINHO DIAS</td><td>87.9</td><td>85.1</td><td>87.2</td><td>85.3</td><td>81.4</td><td><span class="badge badge-yellow">Atencao</span>span></td></tr>
-  <tr><td>F106664</td>td><td>RAISSA LIMA DE OLIVEIRA</td>td><td>86.7</td>td><td>84.2</td>td><td>86.8</td>td><td>84.7</td>td><td>80.9</td>td><td><span class="badge badge-yellow">Atencao</span>span></td>td></tr>
-  </tbody>
-  </table>
-  </div>
-  
-  <div class="tab-content" id="consolidado">
-  <h3 style="margin-bottom:15px">Visao Consolidada - Empresarial vs Residencial</h3>
-  <table>
-  <thead>
-  <tr><th>Indicador</th><th>Empresarial</th><th>Residencial</th><th>Meta</th><th>Status</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>DPA Ocupacao (%)</td><td>92.6%</td><td>90.19%</td><td>90%</td><td><span class="badge badge-green">AMBOS OK</span>span></td></tr>
-  <tr><td>Chat TOA (%)</td>td><td>87.2%</td>td><td>88.0%</td>td><td>85%</td>td><td><span class="badge badge-green">AMBOS ACIMA</span>span></td>td></tr>
-  <tr><td>ETIT Por Evento RAL (%)</td><td>89.5%</td><td>89.7%</td><td>85%</td><td><span class="badge badge-green">AMBOS ACIMA</span>span></td></tr>
-  <tr><td>ETIT Por Evento REC (%)</td>td><td>87.1%</td>td><td>88.0%</td>td><td>85%</td>td><td><span class="badge badge-green">AMBOS ACIMA</span>span></td>td></tr>
-  <tr><td>ETIT Outage Sem Sinal GPON (%)</td><td>82.9%</td><td>84.1%</td><td>80%</td><td><span class="badge badge-green">AMBOS ACIMA</span>span></td></tr>
-  <tr><td>Log Outage Reprog. Sem Sinal GPON (%)</td>td><td>12.3%</td>td><td>10.8%</td>td><td>&lt;15%</td>td><td><span class="badge badge-green">AMBOS OK</span>span></td>td></tr>
-  <tr><td>ETIT Outage Residencial Sem Sinal</td><td>-</td><td>92.4%</td><td>90%</td><td><span class="badge badge-green">ACIMA</span>span></td></tr>
-  <tr><td>ETIT Outage Residencial Degradacao</td>td><td>-</td>td><td>89.7%</td>td><td>85%</td>td><td><span class="badge badge-green">ACIMA</span>span></td>td></tr>
-  <tr><td>TMA (min)</td><td>10:32</td><td>10:12</td><td>11:00</td><td><span class="badge badge-green">AMBOS OK</span>span></td></tr>
-  <tr><td>Volume Atendimentos</td>td><td>82 Mil</td>td><td>61 Mil</td>td><td>-</td>td><td><span class="badge badge-green">Normal</span>span></td>td></tr>
-  <tr><td>Variacao Semanal</td><td>+2.1%</td><td>+1.5%</td><td>-</td><td><span class="badge badge-green">CRESCIMENTO</span>span></td></tr>
-  </tbody>
-  </table>
-  </div>
-  </div>
-  
-  <div class="section">
-  <h2>Descricao dos Indicadores</h2>
-  <div class="two-col">
-  <div class="indicator-card">
-  <h3>DPA - OCUPACAO</h3>
-  <div class="desc">% de ocupacao produtiva do colaborador. Fonte: DPA Verint. Medicao: Bom para Cima.</div>
-  </div>
-  <div class="indicator-card">
-  <h3>CHAT TOA</h3>
-  <div class="desc">% de interacao dentro de 10 min. Mede a agilidade de resposta no chat do sistema TOA.</div>
-  </div>
-  <div class="indicator-card">
-  <h3>ETIT POR EVENTO RAL</h3>
-  <div class="desc">% tarefas direcionadas para o tecnico em ate 30min. Demanda tipo RAL (Reclamacao).</div>
-  </div>
-  <div class="indicator-card">
-  <h3>ETIT POR EVENTO REC</h3>
-  <div class="desc">% tarefas direcionadas para o tecnico em ate 30min. Demanda tipo REC (Reconexao).</div>
-  </div>
-  <div class="indicator-card">
-  <h3>ETIT OUTAGE SEM SINAL (GPON)</h3>
-  <div class="desc">Volume dentro do prazo (DP) / Volume Total. Mede eficiencia no tratamento de outages GPON.</div>
-  </div>
-  <div class="indicator-card">
-  <h3>LOG OUTAGE REPROGRAMADO SEM SINAL GPON</h3>
-  <div class="desc">% outages reprogramados sintoma sem sinal GPON. Bom para Baixo.</div>
-  </div>
-  <div class="indicator-card">
-  <h3>ETIT OUTAGE RESIDENCIAL SEM SINAL</h3>
-  <div class="desc">Data/Hora do primeiro acionamento que foi para o TOA. Mede tempo de resposta.</div>
-  </div>
-  <div class="indicator-card">
-  <h3>ETIT OUTAGE RESIDENCIAL DEGRADACAO</h3>
-  <div class="desc">Data/Hora do primeiro acionamento que foi para o TOA. Mede tempo de resposta para degradacao.</div>
-  </div>
-  </div>
-  </div>
-  
-  <div class="section">
-  <h2>Ranking TOP 5 - Semana</h2>
-  <div class="two-col">
-  <div class="chart-placeholder">
-  <h3 style="color:#e50914;margin-bottom:15px">TOP 5 EMPRESARIAL - DPA</h3>
-  <div class="bar-chart">
-  <div class="bar" style="height:95.9%"><span>95.9%</span><span class="name">LEANDRO</span></div>
-  <div class="bar" style="height:94.2%"><span>94.2%</span><span class="name">BRUNO</span></div>
-  <div class="bar" style="height:93.5%"><span>93.5%</span><span class="name">SANDRO</span></div>
-  <div class="bar" style="height:92.8%"><span>92.8%</span><span class="name">IGOR</span></div>
-  <div class="bar" style="height:92.1%"><span>92.1%</span><span class="name">GABRIELA</span></div>
-  </div>
-  </div>
-  <div class="chart-placeholder">
-  <h3 style="color:#e50914;margin-bottom:15px">TOP 5 RESIDENCIAL - DPA</h3>
-  <div class="bar-chart">
-  <div class="bar" style="height:93.2%;background:linear-gradient(to top,#0f3460,#4a90d9)"><span>93.2%</span><span class="name">MARLEY</span></div>
-  <div class="bar" style="height:92.5%;background:linear-gradient(to top,#0f3460,#4a90d9)"><span>92.5%</span><span class="name">KELLY</span></div>
-  <div class="bar" style="height:91.8%;background:linear-gradient(to top,#0f3460,#4a90d9)"><span>91.8%</span><span class="name">THIAGO</span></div>
-  <div class="bar" style="height:90.7%;background:linear-gradient(to top,#0f3460,#4a90d9)"><span>90.7%</span><span class="name">LEONARDO</span></div>
-  <div class="bar" style="height:89.8%;background:linear-gradient(to top,#0f3460,#4a90d9)"><span>89.8%</span><span class="name">MARISTELLA</span></div>
-  </div>
-  </div>
-  </div>
-  </div>
-  
-  <div class="footer">
-  <p>Dashboard Indicadores COP Rede | Equipe Nelson Soares | COP REDE RJ</p>
-  <p>Gerado em: 02/12/2026 | Fonte: Power BI COP Rede / DPA Verint / Analitico TOA</p>
-  <p>Proxima atualizacao: Semana de 09 a 15/12/2026</p>
-  </div>
-  </div>
-  
-  <script>
-    function showTab(tabId){
-      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
-      document.getElementById(tabId).classList.add('active');
-      event.target.classList.add('active');
-    }
-  </script>
-  </body>
-</html>html>
-  </script></p></p></span></span></td></td></tr></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr>
-  </tbody></th></th></tr></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr>
-  </tbody></th></th></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr></tr></td></td></tr>
-  </tbody></th></th></tr>
-    </thead>
-  </table></h2></h1>
-      </div>
-  </body>
-  </style></title>
-  </head>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Indicadores COP Rede - Equipe Nelson Soares</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:#1a1a2e;color:#fff;min-height:100vh}
+.hdr{background:linear-gradient(135deg,#e50914,#b20710);padding:20px 30px;display:flex;align-items:center;justify-content:space-between}
+.hdr h1{font-size:1.5em}
+.hdr .inf{font-size:.85em;opacity:.9}
+.ctn{max-width:1400px;margin:0 auto;padding:20px}
+.kg{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin:20px 0}
+.kc{background:linear-gradient(145deg,#16213e,#1a1a2e);border-radius:12px;padding:20px;border:1px solid #2a2a4a;transition:transform .2s}
+.kc:hover{transform:translateY(-3px);border-color:#e50914}
+.kc .lb{font-size:.75em;color:#aaa;text-transform:uppercase;letter-spacing:1px}
+.kc .vl{font-size:2em;font-weight:700;margin:8px 0;color:#e50914}
+.kc .tg{font-size:.8em;color:#888}
+.kc.gr .vl{color:#00c853}
+.kc.yl .vl{color:#ffc107}
+.sec{margin:30px 0}
+.sec h2{font-size:1.3em;margin-bottom:15px;padding-bottom:8px;border-bottom:2px solid #e50914;display:inline-block}
+.tabs{display:flex;gap:5px;margin:15px 0}
+.tab{padding:10px 20px;background:#16213e;border:1px solid #2a2a4a;border-radius:8px 8px 0 0;cursor:pointer;font-size:.85em;color:#aaa}
+.tab.act{background:#e50914;color:#fff;border-color:#e50914}
+.tc{display:none;background:#16213e;border-radius:0 12px 12px 12px;padding:20px;border:1px solid #2a2a4a}
+.tc.act{display:block}
+table{width:100%;border-collapse:collapse;font-size:.85em}
+th{background:#0f3460;padding:12px 15px;text-align:left;font-weight:600;text-transform:uppercase;font-size:.75em;letter-spacing:1px;color:#e50914}
+td{padding:10px 15px;border-bottom:1px solid #2a2a4a}
+tr:hover td{background:rgba(229,9,20,.05)}
+.bg{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.75em;font-weight:600}
+.bgr{background:rgba(0,200,83,.15);color:#00c853}
+.byl{background:rgba(255,193,7,.15);color:#ffc107}
+.tc2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.ic{background:#16213e;border-radius:12px;padding:20px;border:1px solid #2a2a4a;margin:10px 0}
+.ic h3{color:#e50914;margin-bottom:5px;font-size:1em}
+.ic .ds{color:#888;font-size:.8em}
+.ft{text-align:center;padding:30px;color:#555;font-size:.8em;border-top:1px solid #2a2a4a;margin-top:40px}
+@media(max-width:768px){.kg{grid-template-columns:repeat(2,1fr)}.tc2{grid-template-columns:1fr}}
+</style></head><body>
+<div class="hdr"><div><h1>Dashboard Indicadores COP Rede</h1><div class="inf">Equipe Nelson Soares | COP REDE RJ | Semana 02 a 08/12/2026</div></div><div style="text-align:right"><div class="inf">Dados: 12/02/2026</div><div class="inf">Periodo: Fev/2026</div></div></div>
+<div class="ctn">
+<div class="kg"><div class="kc gr"><div class="lb">DPA OCUPACAO - EMPRESARIAL</div><div class="vl">92.6%</div><div class="tg">Meta: 90% | ACIMA</div></div><div class="kc gr"><div class="lb">DPA OCUPACAO - RESIDENCIAL</div><div class="vl">90.19%</div><div class="tg">Meta: 90% | ATINGIDO</div></div><div class="kc gr"><div class="lb">CHAT TOA - INTERACAO 10MIN</div><div class="vl">89.0%</div><div class="tg">Meta: 85% | ACIMA</div></div><div class="kc"><div class="lb">ETIT POR EVENTO - EMPRESARIAL</div><div class="vl">90.2%</div><div class="tg">COP Rede RJ</div></div></div>
+<div class="kg"><div class="kc"><div class="lb">ETIT POR EVENTO RAL</div><div class="vl">91.4%</div><div class="tg">Tarefas em ate 30min</div></div><div class="kc"><div class="lb">ETIT POR EVENTO REC</div><div class="vl">88.6%</div><div class="tg">Tarefas em ate 30min</div></div><div class="kc"><div class="lb">ETIT OUTAGE SEM SINAL GPON</div><div class="vl">85.7%</div><div class="tg">Vol. Dentro Prazo / Total</div></div><div class="kc yl"><div class="lb">LOG OUTAGE REPROG. GPON</div><div class="vl">12.3%</div><div class="tg">% Outages Reprogramados</div></div></div>
+<div class="sec"><h2>Indicadores por Analista</h2>
+<div class="tabs"><div class="tab act" onclick="sT('emp')">EMPRESARIAL</div><div class="tab" onclick="sT('res')">RESIDENCIAL</div><div class="tab" onclick="sT('con')">CONSOLIDADO</div></div>
+<div class="tc act" id="emp"><table><thead><tr><th>Matricula</th><th>Analista</th><th>DPA %</th><th>Chat TOA %</th><th>ETIT RAL %</th><th>ETIT REC %</th><th>ETIT GPON %</th><th>Status</th></tr></thead><tbody id="tbe"></tbody></table></div>
+<div class="tc" id="res"><table><thead><tr><th>Matricula</th><th>Analista</th><th>DPA %</th><th>Chat TOA %</th><th>ETIT RAL %</th><th>ETIT REC %</th><th>ETIT GPON %</th><th>Status</th></tr></thead><tbody id="tbr"></tbody></table></div>
+<div class="tc" id="con"><h3 style="margin-bottom:15px">Visao Consolidada</h3><table><thead><tr><th>Indicador</th><th>Empresarial</th><th>Residencial</th><th>Meta</th><th>Status</th></tr></thead><tbody id="tbc"></tbody></table></div></div>
+<div class="sec"><h2>Descricao dos Indicadores</h2><div class="tc2">
+<div class="ic"><h3>DPA - OCUPACAO</h3><div class="ds">% de ocupacao produtiva do colaborador. Fonte: DPA Verint.</div></div>
+<div class="ic"><h3>CHAT TOA</h3><div class="ds">% de interacao dentro de 10 min no sistema TOA.</div></div>
+<div class="ic"><h3>ETIT POR EVENTO RAL</h3><div class="ds">% tarefas direcionadas para o tecnico em ate 30min (RAL).</div></div>
+<div class="ic"><h3>ETIT POR EVENTO REC</h3><div class="ds">% tarefas direcionadas para o tecnico em ate 30min (REC).</div></div>
+<div class="ic"><h3>ETIT OUTAGE SEM SINAL (GPON)</h3><div class="ds">Volume dentro do prazo (DP) / Volume Total.</div></div>
+<div class="ic"><h3>LOG OUTAGE REPROG. SEM SINAL GPON</h3><div class="ds">% outages reprogramados sintoma sem sinal GPON.</div></div>
+<div class="ic"><h3>ETIT OUTAGE RESIDENCIAL SEM SINAL</h3><div class="ds">Data/Hora do primeiro acionamento para o TOA.</div></div>
+<div class="ic"><h3>ETIT OUTAGE RESIDENCIAL DEGRADACAO</h3><div class="ds">Data/Hora do primeiro acionamento para o TOA.</div></div>
+</div></div>
+<div class="ft"><p>Dashboard Indicadores COP Rede | Equipe Nelson Soares | COP REDE RJ</p><p>Gerado: 02/12/2026 | Fonte: Power BI / DPA Verint / Analitico TOA</p></div></div>
+<script>
+function sT(id){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));document.querySelectorAll('.tc').forEach(c=>c.classList.remove('act'));document.getElementById(id).classList.add('act');event.target.classList.add('act')}
+const emp=[['N6088107','LEANDRO GONCALVES DE CARVALHO',95.9,92.1,94.5,93.2,88.7,'Destaque'],['N5619600','BRUNO COSTA BUCARD',94.2,91.5,93.8,91.7,87.3,'Destaque'],['N5737414','SANDRO DA SILVA CARVALHO',93.5,90.8,92.1,90.4,86.9,'Destaque'],['N0189105','IGOR MARCELINO DE MARINS',92.8,89.7,91.5,89.8,85.4,'OK'],['N5713690','GABRIELA TAVARES DA SILVA',92.1,88.9,90.7,88.5,84.2,'OK'],['N5802257','MAGNO FERRAREZ DE MORAIS',91.1,88.2,89.4,87.6,83.8,'OK'],['F201714','FERNANDA MESQUITA DE FREITAS',90.4,87.5,88.9,86.3,82.5,'OK'],['N6173055','JEFFERSON LUIS G. COITINHO',89.5,86.8,87.6,85.1,81.9,'Atencao'],['N0125317','ROBERTO SILVA DO NASCIMENTO',88.7,85.4,86.2,84.7,80.3,'Atencao'],['F218860','ALDENES MARQUES I. DA SILVA',87.9,84.6,85.8,83.2,79.8,'Atencao'],['N5819183','RODRIGO PIRES BERNARDINO',89.1,86.1,87.3,85.9,82.1,'Atencao'],['N5926003','SUELLEN HERNANDEZ DA SILVA',88.7,85.7,86.9,84.5,81.4,'Atencao'],['N5932064','MONICA DA SILVA RODRIGUES',87.3,84.2,85.4,83.8,80.6,'Atencao']];
+const res=[['N0238475','MARLEY MARQUES RIBEIRO',93.2,91.4,92.8,91.5,87.6,'Destaque'],['N5923221','KELLY PINHEIRO LIRA',92.5,90.7,91.9,90.8,86.3,'Destaque'],['N5772086','THIAGO PEREIRA DA SILVA',91.8,89.5,91.2,89.7,85.8,'OK'],['N0239871','LEONARDO F. L. DE ALMEIDA',90.7,88.9,90.4,88.6,84.5,'OK'],['N5577565','MARISTELLA MARCIA DOS SANTOS',89.8,87.6,89.1,87.4,83.2,'OK'],['N5972428','CRISTIANE HERMOGENES DA SILVA',88.5,86.3,88.5,86.1,82.7,'Atencao'],['N4014011','ALAN MARINHO DIAS',87.9,85.1,87.2,85.3,81.4,'Atencao'],['F106664','RAISSA LIMA DE OLIVEIRA',86.7,84.2,86.8,84.7,80.9,'Atencao']];
+function mkR(d,tbId){const tb=document.getElementById(tbId);d.forEach(r=>{const tr=document.createElement('tr');const cls=r[7]==='Destaque'?'bgr':r[7]==='OK'?'bgr':'byl';tr.innerHTML='<td>'+r[0]+'</td><td>'+r[1]+'</td><td>'+r[2]+'</td><td>'+r[3]+'</td><td>'+r[4]+'</td><td>'+r[5]+'</td><td>'+r[6]+'</td><td><span class="bg '+cls+'">'+r[7]+'</span></td>';tb.appendChild(tr)})}
+mkR(emp,'tbe');mkR(res,'tbr');
+const con=[['DPA Ocupacao (%)','92.6%','90.19%','90%','AMBOS OK'],['Chat TOA (%)','87.2%','88.0%','85%','AMBOS ACIMA'],['ETIT RAL (%)','89.5%','89.7%','85%','AMBOS ACIMA'],['ETIT REC (%)','87.1%','88.0%','85%','AMBOS ACIMA'],['ETIT Outage GPON (%)','82.9%','84.1%','80%','AMBOS ACIMA'],['Log Outage Reprog. GPON','12.3%','10.8%','<15%','OK'],['ETIT Outage Res. Sem Sinal','-','92.4%','90%','ACIMA'],['ETIT Outage Res. Degradacao','-','89.7%','85%','ACIMA'],['TMA (min)','10:32','10:12','11:00','AMBOS OK'],['Volume','82 Mil','61 Mil','-','Normal'],['Variacao Semanal','+2.1%','+1.5%','-','CRESCIMENTO']];
+const tbc=document.getElementById('tbc');con.forEach(r=>{const tr=document.createElement('tr');tr.innerHTML='<td>'+r[0]+'</td><td>'+r[1]+'</td><td>'+r[2]+'</td><td>'+r[3]+'</td><td><span class="bg bgr">'+r[4]+'</span></td>';tbc.appendChild(tr)});
+</script></body></html>
