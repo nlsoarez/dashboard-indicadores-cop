@@ -222,6 +222,70 @@ DPA_THRESHOLD_ALERTA  = 80.0   # >= amarelo, < verde
 DPA_SHEET_CANDIDATES = ["Analistas", "Analisats", "Analistas DPA"]
 
 # =====================================================
+# INDICADORES TOA — Planilha Analitico_Indicadores_TOA
+# =====================================================
+
+# Aba da planilha
+TOA_IND_SHEET = "TOA"
+
+# Nomes dos indicadores que queremos (exatamente como aparecem na coluna)
+TOA_IND_CANCELADAS  = "TAREFAS CANCELADAS"
+TOA_IND_VALIDACAO   = "TEMPO DE VALIDAÇÃO DO FORMULÁRIO"
+
+TOA_INDICADORES_FILTRO = [TOA_IND_CANCELADAS, TOA_IND_VALIDACAO]
+
+# Rótulos curtos
+TOA_IND_LABELS = {
+    TOA_IND_CANCELADAS: "Tarefas Canceladas",
+    TOA_IND_VALIDACAO:  "Tempo Validação Form.",
+}
+
+# Cores por indicador
+TOA_IND_COLORS = {
+    TOA_IND_CANCELADAS: "#E74C3C",   # vermelho — menor = melhor
+    TOA_IND_VALIDACAO:  "#16A085",   # verde-azulado — aderência
+}
+
+# Para TAREFAS CANCELADAS: INDICADOR=1 = CANCELADA = ruim (indicador invertido)
+# Para TEMPO DE VALIDAÇÃO: INDICADOR=1 = ADERENTE = bom
+TOA_IND_INVERTIDOS = {TOA_IND_CANCELADAS}
+
+# Colunas da planilha TOA
+TOA_COL_INDICADOR_NOME  = "INDICADOR_NOME"
+TOA_COL_ID_ATIVIDADE    = "ID_ATIVIDADE"
+TOA_COL_LOGIN           = "LOGIN"
+TOA_COL_RESPONSAVEL     = "RESPONSAVEL"
+TOA_COL_REGIONAL        = "IN_REGIONAL"
+TOA_COL_GRUPO           = "IN_GRUPO"
+TOA_COL_CIDADE          = "IN_CIDADE_UF"
+TOA_COL_UF              = "IN_UF"
+TOA_COL_TIPO_ATIVIDADE  = "TIPO_ATIVIDADE"
+TOA_COL_TIPO_INCIDENTE  = "TIPO_INCIDENTE"
+TOA_COL_REDE            = "REDE"
+TOA_COL_MERCADO         = "MERCADO"
+TOA_COL_NATUREZA        = "NATUREZA"
+TOA_COL_MDU             = "MDU"
+TOA_COL_FECHAMENTO      = "FECHAMENTO"
+TOA_COL_SOLUCAO         = "SOLUCAO"
+TOA_COL_DATA            = "DATA"
+TOA_COL_DT_ROTEAMENTO   = "DT_ROTEAMENTO"
+TOA_COL_DT_INICIO_FORM  = "DT_INICIO_FORM"
+TOA_COL_DT_FIM_FORM     = "DT_FIM_FORM"
+TOA_COL_DT_CANCELAMENTO = "DT_CANCELAMENTO"
+TOA_COL_TMR             = "TMR"
+TOA_COL_AGING           = "AGING"
+TOA_COL_INDICADOR       = "INDICADOR"
+TOA_COL_STATUS          = "INDICADOR_STATUS"
+TOA_COL_ANOMES          = "ANOMES"
+
+# Ordenação dos faixas de AGING (do menor para o maior)
+TOA_AGING_ORDER = [
+    "Até 1 Min", "Até 5 Min", "Até 15 Min", "Até 30 Min",
+    "Até 60 Min", "Até 04 Horas", "Até 08 Horas", "Até 12 Horas",
+    "Até 24 Horas", "Até 48 Horas", "Maior 48 Horas",
+]
+
+# =====================================================
 # CORES DO DASHBOARD
 # =====================================================
 COR_PRIMARIA = "#1B4F72"
