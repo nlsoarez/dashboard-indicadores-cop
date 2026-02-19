@@ -624,20 +624,43 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### 📋 Status dos dados")
+
+    # Diagnóstico de uploads
+    _upload_keys = {
+        "ETIT": "uploaded_etit_bytes",
+        "Residencial": "uploaded_res_ind_bytes",
+        "TOA": "uploaded_toa_bytes",
+        "DPA": "uploaded_dpa_bytes",
+    }
+    for _label, _key in _upload_keys.items():
+        if _key in st.session_state:
+            _sz = len(st.session_state[_key])
+            st.caption(f"📎 {_label}: {_sz:,} bytes carregados")
+        else:
+            st.caption(f"⬜ {_label}: não carregado")
+
     if etit_loaded:
         st.success(f"✅ ETIT: {len(df_etit)} eventos")
+    elif "uploaded_etit_bytes" in st.session_state:
+        st.warning("⚠️ ETIT: planilha carregada mas sem dados da equipe")
     if res_ind_loaded:
         st.success(f"✅ Ind. Residencial: {len(df_res_ind):,} registros")
+    elif "uploaded_res_ind_bytes" in st.session_state:
+        st.warning("⚠️ Residencial: planilha carregada mas sem dados")
     if toa_loaded:
         anomes_str = str(toa_anomes) if toa_anomes else "?"
         n_canc = len(df_toa[df_toa["INDICADOR_NOME"] == "TAREFAS CANCELADAS"]) if toa_loaded else 0
         n_val  = len(df_toa[df_toa["INDICADOR_NOME"] == "TEMPO DE VALIDAÇÃO DO FORMULÁRIO"]) if toa_loaded else 0
         st.success(f"✅ TOA {anomes_str}: {n_canc} canceladas · {n_val} validações")
+    elif "uploaded_toa_bytes" in st.session_state:
+        st.warning("⚠️ TOA: planilha carregada mas sem dados da equipe")
     if dpa_loaded:
         mes_label = dpa_mes_info.get("mes_nome", "?")
         dpa_geral = dpa_mes_info.get("dpa_geral_pct")
         dpa_g_str = f" · {dpa_geral:.1f}%" if dpa_geral else ""
         st.success(f"✅ Ocup. DPA: {len(df_dpa)} analistas · {mes_label}{dpa_g_str}")
+    elif "uploaded_dpa_bytes" in st.session_state:
+        st.warning("⚠️ DPA: planilha carregada mas sem dados da equipe")
 
     # Filtro Indicadores Residencial
     if res_ind_loaded:
