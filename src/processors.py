@@ -27,6 +27,16 @@ from src.config import (
     RES_COL_DT_FIM, RES_COL_TMA, RES_COL_TMR, RES_COL_ANOMES,
     # DPA Ocupação
     DPA_MESES_PT, DPA_SHEET_ANALISTAS, DPA_SHEET_CONSOLIDADO,
+    # Indicadores TOA
+    TOA_IND_SHEET, TOA_INDICADORES_FILTRO, TOA_IND_INVERTIDOS,
+    TOA_COL_INDICADOR_NOME, TOA_COL_LOGIN, TOA_COL_INDICADOR,
+    TOA_COL_STATUS, TOA_COL_REGIONAL,
+    TOA_COL_TIPO_ATIVIDADE, TOA_COL_REDE, TOA_COL_MERCADO,
+    TOA_COL_NATUREZA, TOA_COL_SOLUCAO,
+    TOA_COL_TMR, TOA_COL_AGING, TOA_COL_DATA,
+    TOA_COL_DT_CANCELAMENTO, TOA_COL_DT_INICIO_FORM, TOA_COL_DT_FIM_FORM,
+    TOA_COL_ANOMES, TOA_COL_ID_ATIVIDADE, TOA_AGING_ORDER,
+    TOA_IND_CANCELADAS, TOA_IND_VALIDACAO,
 )
 
 
@@ -551,3 +561,262 @@ def primeiro_nome(nome_completo: str) -> str:
     if len(parts) <= 2:
         return nome_completo
     return f"{parts[0]} {parts[-1]}"
+
+
+# =====================================================
+# INDICADORES TOA — Loader e processadores
+# =====================================================
+
+def load_toa_indicadores(uploaded_file) -> pd.DataFrame:
+    """
+    Lê a planilha Analitico_Indicadores_TOA e retorna apenas
+    TAREFAS CANCELADAS e TEMPO DE VALIDAÇÃO DO FORMULÁRIO
+    filtrados pela equipe monitorada.
+
+    Detecção automática do mês mais recente via coluna ANOMES.
+    """
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+
+    df = pd.read_excel(uploaded_file, sheet_name=TOA_IND_SHEET)
+
+    # Filtrar indicadores de interesse
+    if TOA_COL_INDICADOR_NOME not in df.columns:
+        return pd.DataFrame()
+
+    df = df[df[TOA_COL_INDICADOR_NOME].isin(TOA_INDICADORES_FILTRO)].copy()
+    if df.empty:
+        return df
+
+    # Normalizar login (maiúsculo, sem espaços)
+    df[TOA_COL_LOGIN] = df[TOA_COL_LOGIN].astype(str).str.strip().str.upper()
+
+    # Detectar ANOMES mais recente e filtrar
+    if TOA_COL_ANOMES in df.columns:
+        df[TOA_COL_ANOMES] = pd.to_numeric(df[TOA_COL_ANOMES], errors="coerce")
+        anomes_recente = df[TOA_COL_ANOMES].max()
+        df = df[df[TOA_COL_ANOMES] == anomes_recente].copy()
+
+    # Filtrar equipe
+    df = df[df[TOA_COL_LOGIN].isin(EQUIPE_IDS)].copy()
+    if df.empty:
+        return df
+
+    # Merge com nome e setor
+    df = df.merge(
+        BASE_EQUIPE[["Matricula", "Nome", "Setor"]],
+        left_on=TOA_COL_LOGIN, right_on="Matricula", how="left"
+    )
+
+    # Tipos
+    if TOA_COL_INDICADOR in df.columns:
+        df[TOA_COL_INDICADOR] = pd.to_numeric(df[TOA_COL_INDICADOR], errors="coerce")
+
+    for c in [TOA_COL_DATA, TOA_COL_DT_CANCELAMENTO, TOA_COL_DT_INICIO_FORM, TOA_COL_DT_FIM_FORM]:
+        if c in df.columns:
+            df[c] = pd.to_datetime(df[c], errors="coerce")
+
+    # TMR já vem como timedelta; converter para minutos para facilitar análise
+    if TOA_COL_TMR in df.columns:
+        df["TMR_min"] = df[TOA_COL_TMR].dt.total_seconds() / 60
+
+    # Coluna ADERENTE normalizada:
+    # Canceladas: INDICADOR=1 → NÃO ADERENTE → invertemos
+    # Validação:  INDICADOR=1 → ADERENTE
+    df["ADERENTE"] = df.apply(
+        lambda row: (
+            (row[TOA_COL_INDICADOR] == 0)
+            if row[TOA_COL_INDICADOR_NOME] in TOA_IND_INVERTIDOS
+            else (row[TOA_COL_INDICADOR] == 1)
+        ),
+        axis=1,
+    ).astype(int)
+
+    # Data para evolução diária
+    if TOA_COL_DATA in df.columns:
+        df["DATA_DIA"] = df[TOA_COL_DATA].dt.normalize()
+
+    return df
+
+
+def toa_anomes_recente(df: pd.DataFrame) -> int | None:
+    """Retorna o ANOMES mais recente presente no DataFrame."""
+    if df.empty or TOA_COL_ANOMES not in df.columns:
+        return None
+    v = pd.to_numeric(df[TOA_COL_ANOMES], errors="coerce").max()
+    return int(v) if pd.notna(v) else None
+
+
+def toa_resumo_por_indicador(df: pd.DataFrame) -> pd.DataFrame:
+    """KPI geral por indicador: total, aderentes, aderência%, TMR médio."""
+    if df.empty:
+        return pd.DataFrame()
+    rows = []
+    for ind in TOA_INDICADORES_FILTRO:
+        sub = df[df[TOA_COL_INDICADOR_NOME] == ind]
+        if sub.empty:
+            continue
+        total = len(sub)
+        ader  = int(sub["ADERENTE"].sum())
+        pct   = round(ader / total * 100, 1) if total > 0 else 0.0
+        tmr_m = sub["TMR_min"].mean() if "TMR_min" in sub.columns else None
+        rows.append({
+            "Indicador": ind,
+            "Total": total,
+            "Aderentes": ader,
+            "Aderencia_Pct": pct,
+            "TMR_Medio_min": round(tmr_m, 2) if tmr_m is not None and pd.notna(tmr_m) else None,
+        })
+    return pd.DataFrame(rows)
+
+
+# ---- TAREFAS CANCELADAS ----
+
+def toa_canceladas_por_analista(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ranking de tarefas canceladas por analista.
+    Canceladas = todas as linhas deste indicador (INDICADOR=1 sempre).
+    Menor = melhor.
+    """
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_CANCELADAS].copy()
+    if sub.empty:
+        return pd.DataFrame()
+    g = sub.groupby([TOA_COL_LOGIN, "Nome", "Setor"]).agg(
+        Canceladas=(TOA_COL_INDICADOR, "count"),
+        TMR_Medio_h=("TMR_min", lambda x: round(x.mean() / 60, 2) if x.notna().any() else None),
+    ).reset_index().rename(columns={TOA_COL_LOGIN: "Login"})
+    return g.sort_values("Canceladas", ascending=False).reset_index(drop=True)
+
+
+def toa_canceladas_por_tipo(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown de tarefas canceladas por TIPO_ATIVIDADE."""
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_CANCELADAS]
+    if sub.empty or TOA_COL_TIPO_ATIVIDADE not in sub.columns:
+        return pd.DataFrame()
+    g = sub.groupby(TOA_COL_TIPO_ATIVIDADE).size().reset_index(name="Canceladas")
+    g.columns = ["Tipo Atividade", "Canceladas"]
+    return g.sort_values("Canceladas", ascending=False).reset_index(drop=True)
+
+
+def toa_canceladas_por_aging(df: pd.DataFrame) -> pd.DataFrame:
+    """Distribuição de tarefas canceladas por faixa de AGING."""
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_CANCELADAS]
+    if sub.empty or TOA_COL_AGING not in sub.columns:
+        return pd.DataFrame()
+    g = sub.groupby(TOA_COL_AGING).size().reset_index(name="Canceladas")
+    g.columns = ["Aging", "Canceladas"]
+    # Ordenar pela ordem definida em config
+    order_map = {v: i for i, v in enumerate(TOA_AGING_ORDER)}
+    g["_ord"] = g["Aging"].map(order_map).fillna(99)
+    return g.sort_values("_ord").drop(columns="_ord").reset_index(drop=True)
+
+
+def toa_canceladas_por_rede(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown de tarefas canceladas por REDE."""
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_CANCELADAS]
+    if sub.empty or TOA_COL_REDE not in sub.columns:
+        return pd.DataFrame()
+    g = sub.groupby(TOA_COL_REDE).size().reset_index(name="Canceladas")
+    g.columns = ["Rede", "Canceladas"]
+    return g.sort_values("Canceladas", ascending=False).reset_index(drop=True)
+
+
+def toa_canceladas_por_regional(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown de tarefas canceladas por Regional."""
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_CANCELADAS]
+    if sub.empty or TOA_COL_REGIONAL not in sub.columns:
+        return pd.DataFrame()
+    g = sub.groupby(TOA_COL_REGIONAL).size().reset_index(name="Canceladas")
+    g.columns = ["Regional", "Canceladas"]
+    return g.sort_values("Canceladas", ascending=False).reset_index(drop=True)
+
+
+def toa_canceladas_evolucao(df: pd.DataFrame) -> pd.DataFrame:
+    """Evolução diária de tarefas canceladas."""
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_CANCELADAS]
+    if sub.empty or "DATA_DIA" not in sub.columns:
+        return pd.DataFrame()
+    g = sub.groupby("DATA_DIA").size().reset_index(name="Canceladas")
+    g.columns = ["Data", "Canceladas"]
+    return g.sort_values("Data").reset_index(drop=True)
+
+
+# ---- TEMPO DE VALIDAÇÃO DO FORMULÁRIO ----
+
+def toa_validacao_por_analista(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ranking de aderência ao tempo de validação do formulário por analista.
+    Inclui total de formulários, aderentes, aderência% e TMR médio em minutos.
+    """
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_VALIDACAO].copy()
+    if sub.empty:
+        return pd.DataFrame()
+    g = sub.groupby([TOA_COL_LOGIN, "Nome", "Setor"]).agg(
+        Total=(TOA_COL_INDICADOR, "count"),
+        Aderentes=("ADERENTE", "sum"),
+        TMR_Medio_min=("TMR_min", "mean"),
+    ).reset_index().rename(columns={TOA_COL_LOGIN: "Login"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Total"] * 100).round(1)
+    g["TMR_Medio_min"]  = g["TMR_Medio_min"].round(2)
+    return g.sort_values("Aderencia_Pct", ascending=False).reset_index(drop=True)
+
+
+def toa_validacao_por_tipo(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown do tempo de validação por TIPO_ATIVIDADE."""
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_VALIDACAO]
+    if sub.empty or TOA_COL_TIPO_ATIVIDADE not in sub.columns:
+        return pd.DataFrame()
+    g = sub.groupby(TOA_COL_TIPO_ATIVIDADE).agg(
+        Total=(TOA_COL_INDICADOR, "count"),
+        Aderentes=("ADERENTE", "sum"),
+        TMR_Medio_min=("TMR_min", "mean"),
+    ).reset_index().rename(columns={TOA_COL_TIPO_ATIVIDADE: "Tipo Atividade"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Total"] * 100).round(1)
+    g["TMR_Medio_min"]  = g["TMR_Medio_min"].round(2)
+    return g.sort_values("Total", ascending=False).reset_index(drop=True)
+
+
+def toa_validacao_por_rede(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown do tempo de validação por REDE."""
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_VALIDACAO]
+    if sub.empty or TOA_COL_REDE not in sub.columns:
+        return pd.DataFrame()
+    g = sub.groupby(TOA_COL_REDE).agg(
+        Total=(TOA_COL_INDICADOR, "count"),
+        Aderentes=("ADERENTE", "sum"),
+        TMR_Medio_min=("TMR_min", "mean"),
+    ).reset_index().rename(columns={TOA_COL_REDE: "Rede"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Total"] * 100).round(1)
+    g["TMR_Medio_min"]  = g["TMR_Medio_min"].round(2)
+    return g.sort_values("Total", ascending=False).reset_index(drop=True)
+
+
+def toa_validacao_por_regional(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown do tempo de validação por Regional."""
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_VALIDACAO]
+    if sub.empty or TOA_COL_REGIONAL not in sub.columns:
+        return pd.DataFrame()
+    g = sub.groupby(TOA_COL_REGIONAL).agg(
+        Total=(TOA_COL_INDICADOR, "count"),
+        Aderentes=("ADERENTE", "sum"),
+        TMR_Medio_min=("TMR_min", "mean"),
+    ).reset_index().rename(columns={TOA_COL_REGIONAL: "Regional"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Total"] * 100).round(1)
+    g["TMR_Medio_min"]  = g["TMR_Medio_min"].round(2)
+    return g.sort_values("Total", ascending=False).reset_index(drop=True)
+
+
+def toa_validacao_evolucao(df: pd.DataFrame) -> pd.DataFrame:
+    """Evolução diária da aderência ao tempo de validação."""
+    sub = df[df[TOA_COL_INDICADOR_NOME] == TOA_IND_VALIDACAO]
+    if sub.empty or "DATA_DIA" not in sub.columns:
+        return pd.DataFrame()
+    sub = sub.dropna(subset=["DATA_DIA"])
+    g = sub.groupby("DATA_DIA").agg(
+        Total=(TOA_COL_INDICADOR, "count"),
+        Aderentes=("ADERENTE", "sum"),
+        TMR_Medio_min=("TMR_min", "mean"),
+    ).reset_index().rename(columns={"DATA_DIA": "Data"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Total"] * 100).round(1)
+    g["TMR_Medio_min"]  = g["TMR_Medio_min"].round(2)
+    return g.sort_values("Data").reset_index(drop=True)
