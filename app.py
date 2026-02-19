@@ -16,6 +16,16 @@ from src.config import (
     ETIT_COL_REGIONAL, ETIT_COL_TURNO, ETIT_COL_TMA, ETIT_COL_TMR,
     ETIT_COL_DT_ACIONAMENTO, ETIT_COL_ANOMES, ETIT_COL_INDICADOR_VAL,
     ETIT_COL_NOTA, ETIT_COL_AREA, ETIT_COL_CIDADE, ETIT_COL_UF,
+    # Residencial Indicadores
+    RES_INDICADORES_FILTRO, RES_IND_LABELS, RES_IND_COLORS,
+    RES_IND_INVERTIDOS, RES_IND_ETIT_FIBRA_HFC, RES_IND_ETIT_GPON,
+    RES_IND_REPROG_GPON, RES_IND_ASSERT_FIBRA_HFC, RES_IND_ASSERT_GPON,
+    RES_COL_INDICADOR_NOME, RES_COL_VOLUME, RES_COL_INDICADOR_VAL as RES_COL_IND_VAL,
+    RES_COL_STATUS, RES_COL_REGIONAL as RES_REGIONAL,
+    RES_COL_DT_INICIO, RES_COL_TMA as RES_TMA, RES_COL_TMR as RES_TMR,
+    RES_COL_SOLUCAO, RES_COL_IMPACTO, RES_COL_NATUREZA,
+    RES_COL_CIDADE, RES_COL_UF as RES_UF, RES_COL_ANOMES as RES_ANOMES,
+    RES_COL_ID_MOSTRA,
 )
 from src.processors import (
     load_produtividade, resumo_mensal, resumo_geral,
@@ -24,6 +34,11 @@ from src.processors import (
     load_etit, etit_resumo_analista, etit_por_demanda,
     etit_por_tipo, etit_por_causa, etit_por_regional,
     etit_por_turno, etit_evolucao_diaria,
+    # Residencial Indicadores
+    load_residencial_indicadores,
+    res_kpis_por_indicador, res_por_regional,
+    res_por_natureza, res_por_solucao, res_por_impacto,
+    res_evolucao_diaria,
 )
 
 # =====================================================
@@ -153,6 +168,19 @@ st.markdown("""
         border-left: 4px solid #8E44AD;
         margin-bottom: 0.6rem;
     }
+
+    /* Residencial Indicadores card */
+    .res-ind-card {
+        background: var(--secondary-background-color);
+        border-radius: 12px;
+        padding: 1.1rem 1.2rem;
+        border-top: 3px solid;
+        margin-bottom: 0.6rem;
+    }
+    .res-ind-card .ri-title  { font-size: 0.8rem; font-weight: 600; opacity: 0.6; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.5px; }
+    .res-ind-card .ri-vol    { font-size: 1.6rem; font-weight: 700; }
+    .res-ind-card .ri-pct    { font-size: 1.1rem; font-weight: 600; margin-top: 0.15rem; }
+    .res-ind-card .ri-detail { font-size: 0.78rem; opacity: 0.6; margin-top: 0.3rem; }
 
     /* Table styling */
     .dataframe { font-size: 0.85rem !important; }
@@ -377,7 +405,7 @@ st.markdown("""
 # UPLOAD (persiste dados no session_state)
 # =====================================================
 with st.container():
-    col_upload1, col_upload2, col_info = st.columns([2, 2, 1])
+    col_upload1, col_upload2, col_upload3, col_info = st.columns([2, 2, 2, 1])
     with col_upload1:
         uploaded_file = st.file_uploader(
             "📁 Planilha de Produtividade (Analítico)",
@@ -391,6 +419,16 @@ with st.container():
             type=["xlsx", "xls"],
             help="Planilha com dados ETIT POR EVENTO — opcional",
             key="upload_etit",
+        )
+    with col_upload3:
+        uploaded_res_ind = st.file_uploader(
+            "📁 Analítico Indicadores Residencial",
+            type=["xlsx", "xls"],
+            help=(
+                "Planilha com indicadores: ETIT Fibra HFC, ETIT GPON, "
+                "Reprogramação GPON, Assertividade Fibra HFC, Assertividade GPON — opcional"
+            ),
+            key="upload_res_ind",
         )
     with col_info:
         st.info(
@@ -407,6 +445,10 @@ if uploaded_etit is not None:
     st.session_state["uploaded_etit_bytes"] = uploaded_etit.getvalue()
     st.session_state["uploaded_etit_name"] = uploaded_etit.name
 
+if uploaded_res_ind is not None:
+    st.session_state["uploaded_res_ind_bytes"] = uploaded_res_ind.getvalue()
+    st.session_state["uploaded_res_ind_name"] = uploaded_res_ind.name
+
 if "uploaded_bytes" not in st.session_state:
     st.markdown("---")
     st.markdown("### 👋 Bem-vindo!")
@@ -414,7 +456,9 @@ if "uploaded_bytes" not in st.session_state:
         "Faça upload da planilha **Produtividade COP Rede - Analítico** acima para "
         "visualizar os dados de produtividade da sua equipe.\n\n"
         "Opcionalmente, faça upload da planilha **Analítico Empresarial** para "
-        "visualizar os dados de **ETIT POR EVENTO**."
+        "visualizar os dados de **ETIT POR EVENTO**, e da planilha "
+        "**Analítico Indicadores Residencial** para visualizar os indicadores de "
+        "**ETIT Fibra HFC, ETIT GPON, Reprogramação GPON e Assertividade**."
     )
     with st.expander("📋 Analistas monitorados"):
         st.dataframe(BASE_EQUIPE, use_container_width=True, hide_index=True)
@@ -461,6 +505,26 @@ if "uploaded_etit_bytes" in st.session_state:
 
 
 # =====================================================
+# PROCESSAR DADOS — Indicadores Residencial (opcional)
+# =====================================================
+df_res_ind = pd.DataFrame()
+res_ind_loaded = False
+
+if "uploaded_res_ind_bytes" in st.session_state:
+    try:
+        with st.spinner("Carregando Indicadores Residencial..."):
+            res_ind_obj = io.BytesIO(st.session_state["uploaded_res_ind_bytes"])
+            df_res_ind = load_residencial_indicadores(res_ind_obj)
+            res_ind_loaded = not df_res_ind.empty
+            if not res_ind_loaded:
+                st.warning("Nenhum dado dos indicadores selecionados encontrado na planilha.")
+    except Exception as e:
+        st.warning(f"Erro ao processar planilha de Indicadores Residencial: {e}")
+        with st.expander("Detalhes do erro"):
+            st.code(traceback.format_exc())
+
+
+# =====================================================
 # SIDEBAR - FILTROS
 # =====================================================
 with st.sidebar:
@@ -482,7 +546,11 @@ with st.sidebar:
 
     st.markdown("---")
     if st.button("🗑️ Limpar dados carregados", use_container_width=True):
-        for key in ["uploaded_bytes", "uploaded_name", "uploaded_etit_bytes", "uploaded_etit_name"]:
+        for key in [
+            "uploaded_bytes", "uploaded_name",
+            "uploaded_etit_bytes", "uploaded_etit_name",
+            "uploaded_res_ind_bytes", "uploaded_res_ind_name",
+        ]:
             st.session_state.pop(key, None)
         st.rerun()
 
@@ -496,19 +564,49 @@ with st.sidebar:
             analistas_options[analistas_options[COL_LOGIN]==x][COL_NOME].iloc[0] if len(analistas_options[analistas_options[COL_LOGIN]==x]) > 0 else x,
     )
 
-    # ETIT status
+    # Status das planilhas opcionais
+    st.markdown("---")
     if etit_loaded:
-        st.markdown("---")
-        st.success(f"✅ ETIT: {len(df_etit)} eventos carregados")
+        st.success(f"✅ ETIT: {len(df_etit)} eventos")
+    if res_ind_loaded:
+        st.success(f"✅ Ind. Residencial: {len(df_res_ind):,} registros")
 
-# Aplicar filtros — Produtividade
+    # Filtro por indicador específico (visível somente quando planilha carregada)
+    if res_ind_loaded:
+        st.markdown("### 🏠 Filtro Indicadores Res.")
+        res_ind_selecionado = st.selectbox(
+            "Indicador",
+            options=["Todos"] + RES_INDICADORES_FILTRO,
+            format_func=lambda x: "Todos os indicadores" if x == "Todos" else RES_IND_LABELS.get(x, x),
+            key="res_ind_filter",
+        )
+        # Filtro ANOMES da planilha residencial
+        if RES_ANOMES in df_res_ind.columns:
+            res_meses = sorted(df_res_ind[RES_ANOMES].dropna().unique().tolist())
+            res_mes_sel = st.selectbox(
+                "Período (Indicadores)",
+                options=["Todos"] + res_meses,
+                format_func=lambda x: "Todos" if x == "Todos" else str(x),
+                key="res_mes_filter",
+            )
+        else:
+            res_mes_sel = "Todos"
+    else:
+        res_ind_selecionado = "Todos"
+        res_mes_sel = "Todos"
+
+
+# =====================================================
+# APLICAR FILTROS
+# =====================================================
+# Produtividade
 df_filtrado = df.copy()
 if mes_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado[COL_ANOMES] == mes_selecionado]
 if setor_selecionado != "Todos":
     df_filtrado = df_filtrado[df_filtrado["Setor"] == setor_selecionado]
 
-# Aplicar filtros — ETIT
+# ETIT
 df_etit_filtrado = df_etit.copy()
 if etit_loaded:
     if mes_selecionado != "Todos" and ETIT_COL_ANOMES in df_etit_filtrado.columns:
@@ -517,6 +615,14 @@ if etit_loaded:
         df_etit_filtrado = df_etit_filtrado[df_etit_filtrado["Setor"] == setor_selecionado]
     if analista_selecionado != "Todos":
         df_etit_filtrado = df_etit_filtrado[df_etit_filtrado[ETIT_COL_LOGIN] == analista_selecionado]
+
+# Indicadores Residencial
+df_res_filtrado = df_res_ind.copy()
+if res_ind_loaded:
+    if res_mes_sel != "Todos" and RES_ANOMES in df_res_filtrado.columns:
+        df_res_filtrado = df_res_filtrado[df_res_filtrado[RES_ANOMES] == str(res_mes_sel)]
+    if res_ind_selecionado != "Todos":
+        df_res_filtrado = df_res_filtrado[df_res_filtrado[RES_COL_INDICADOR_NOME] == res_ind_selecionado]
 
 
 # =====================================================
@@ -627,15 +733,22 @@ tab_labels = [
 ]
 if etit_loaded:
     tab_labels.append("⚡ ETIT por Evento")
+if res_ind_loaded:
+    tab_labels.append("🏠 Indicadores Residencial")
 
 tabs = st.tabs(tab_labels)
+
+# Índice das abas opcionais
+_tab_idx = 5
+_tab_etit_idx = _tab_idx if etit_loaded else None
+_tab_res_idx = (_tab_idx + (1 if etit_loaded else 0)) if res_ind_loaded else None
+
 
 # ---- TAB 1: RANKING ----
 with tabs[0]:
     resumo = resumo_geral(df_filtrado)
 
     if not resumo.empty:
-        # Exclude leaders from team ranking
         resumo_equipe = resumo[~resumo[COL_LOGIN].isin(LIDERES_IDS)].copy()
 
         col_rank1, col_rank2 = st.columns(2)
@@ -671,14 +784,12 @@ with tabs[0]:
                 use_container_width=True, height=500,
             )
 
-        # Bar chart
         st.markdown("#### 📊 Ranking por Média Diária")
         rank_media = resumo_equipe[[COL_NOME, "Media_Diaria"]].copy()
         rank_media["Nome"] = rank_media[COL_NOME].apply(primeiro_nome)
         chart_data = rank_media[["Nome", "Media_Diaria"]].set_index("Nome").sort_values("Media_Diaria")
         st.bar_chart(chart_data, horizontal=True, color=COR_PRIMARIA, height=500)
 
-        # ============ SECTOR DETAIL ============
         st.markdown("---")
         st.markdown("#### 📋 Análise Detalhada por Setor")
 
@@ -687,7 +798,6 @@ with tabs[0]:
         if setor_selecionado in ("Todos", "EMPRESARIAL"):
             render_sector_table(resumo_equipe, "EMPRESARIAL", VOL_COLS_EMPRESARIAL, "Oranges")
 
-        # ============ INSIGHTS ============
         st.markdown("---")
         st.markdown("#### 💡 Insights — Pontos Fortes e Oportunidades")
         insights = build_insights(resumo_equipe, setor_selecionado)
@@ -704,7 +814,6 @@ with tabs[1]:
         st.markdown("#### 👑 Visão dos Líderes")
         st.caption("Comparação entre os líderes e as médias das suas equipes.")
 
-        # Leader cards
         cols_lid = st.columns(len(resumo_lid))
         for idx, (_, lrow) in enumerate(resumo_lid.sort_values(COL_VOL_TOTAL, ascending=False).iterrows()):
             nome_l = primeiro_nome(lrow[COL_NOME])
@@ -715,7 +824,6 @@ with tabs[1]:
             dpa_l = lrow.get("DPA_Media", None)
             dpa_l_str = f"{dpa_l:.1f}%" if pd.notna(dpa_l) else "—"
 
-            # Compare vs team average
             team = resumo_equipe_all[resumo_equipe_all["Setor"] == setor_l]
             team_avg_vol = team[COL_VOL_TOTAL].mean() if not team.empty else 0
             team_avg_media = team["Media_Diaria"].mean() if not team.empty else 0
@@ -742,7 +850,6 @@ with tabs[1]:
                     </div>
                 </div>""", unsafe_allow_html=True)
 
-        # Leaders detailed table
         st.markdown("---")
         st.markdown("#### 📊 Comparação Detalhada")
 
@@ -773,7 +880,6 @@ with tabs[1]:
                 styled_lid = styled_lid.background_gradient(cmap="YlOrBr", subset=[vl])
         st.dataframe(styled_lid, use_container_width=True)
 
-        # Leaders vs team comparison
         st.markdown("---")
         st.markdown("#### 📈 Líderes vs Média da Equipe")
 
@@ -806,8 +912,7 @@ with tabs[1]:
                 "Média/Dia": team_avg_media_s,
                 "DPA %": team_avg_dpa_s,
             })
-            comp_df = pd.DataFrame(rows)
-            comp_df = comp_df.set_index("Analista")
+            comp_df = pd.DataFrame(rows).set_index("Analista")
             st.dataframe(
                 comp_df.style
                     .format({"DPA %": "{:.1f}", "Média/Dia": "{:.1f}", "Vol. Total": "{:,.0f}"}, na_rep="—"),
@@ -815,7 +920,6 @@ with tabs[1]:
             )
             st.markdown("")
 
-        # Insights for leaders
         st.markdown("---")
         st.markdown("#### 💡 Insights dos Líderes")
         lid_insights = build_insights(resumo_full, setor_selecionado)
@@ -947,13 +1051,12 @@ with tabs[4]:
 
 # ---- TAB 5: ETIT POR EVENTO ----
 if etit_loaded:
-    with tabs[5]:
+    with tabs[_tab_etit_idx]:
         st.markdown("#### ⚡ ETIT POR EVENTO — Análise da Equipe")
 
         if df_etit_filtrado.empty:
             st.warning("Nenhum dado ETIT POR EVENTO encontrado com os filtros atuais.")
         else:
-            # ---- KPIs ETIT ----
             etit_total_eventos = df_etit_filtrado[ETIT_COL_VOLUME].sum()
             etit_total_ader = df_etit_filtrado[ETIT_COL_INDICADOR_VAL].sum()
             etit_pct_ader = (etit_total_ader / etit_total_eventos * 100) if etit_total_eventos > 0 else 0
@@ -978,7 +1081,6 @@ if etit_loaded:
 
             st.markdown("")
 
-            # ---- Ranking por Analista ----
             st.markdown("##### 🏆 Ranking ETIT por Analista")
             resumo_etit = etit_resumo_analista(df_etit_filtrado)
             if not resumo_etit.empty:
@@ -1012,7 +1114,6 @@ if etit_loaded:
                     )
                 st.dataframe(styled_etit, use_container_width=True)
 
-                # Best/Worst cards
                 if len(tbl_etit) >= 2:
                     best_etit = tbl_etit.iloc[0]
                     worst_etit = tbl_etit.iloc[-1]
@@ -1039,8 +1140,6 @@ if etit_loaded:
                                 <div class="p-detail">Aderência: {best_ader_row['Aderência %']:.1f}% · {best_ader_row['Eventos']:,.0f} eventos</div>
                             </div>""", unsafe_allow_html=True)
 
-            # Bar chart — eventos por analista
-            st.markdown("")
             if not resumo_etit.empty:
                 chart_etit = resumo_etit[["Nome", "Total_Eventos"]].copy()
                 chart_etit["Nome"] = chart_etit["Nome"].apply(primeiro_nome)
@@ -1048,12 +1147,10 @@ if etit_loaded:
                 chart_etit.columns = ["Eventos"]
                 st.bar_chart(chart_etit, horizontal=True, color="#8E44AD", height=400)
 
-            # ---- Breakdowns ----
             st.markdown("---")
             st.markdown("##### 📊 Análises de Composição ETIT")
 
             col_dem, col_tipo = st.columns(2)
-
             with col_dem:
                 st.markdown("**Por Demanda (RAL/REC)**")
                 dem = etit_por_demanda(df_etit_filtrado)
@@ -1073,22 +1170,19 @@ if etit_loaded:
                 if not tipo.empty:
                     tipo["Aderência %"] = (tipo["Aderentes"] / tipo["Eventos"] * 100).round(1)
                     st.dataframe(
-                        tipo.style
-                            .format({"Aderência %": "{:.1f}"}, na_rep="—")
+                        tipo.style.format({"Aderência %": "{:.1f}"}, na_rep="—")
                             .background_gradient(cmap="Purples", subset=["Eventos"]),
                         use_container_width=True, hide_index=True,
                     )
 
             col_causa, col_reg = st.columns(2)
-
             with col_causa:
                 st.markdown("**Por Causa**")
                 causa = etit_por_causa(df_etit_filtrado)
                 if not causa.empty:
                     causa["Aderência %"] = (causa["Aderentes"] / causa["Eventos"] * 100).round(1)
                     st.dataframe(
-                        causa.head(15).style
-                            .format({"Aderência %": "{:.1f}"}, na_rep="—")
+                        causa.head(15).style.format({"Aderência %": "{:.1f}"}, na_rep="—")
                             .background_gradient(cmap="Purples", subset=["Eventos"]),
                         use_container_width=True, hide_index=True,
                     )
@@ -1099,13 +1193,11 @@ if etit_loaded:
                 if not reg.empty:
                     reg["Aderência %"] = (reg["Aderentes"] / reg["Eventos"] * 100).round(1)
                     st.dataframe(
-                        reg.style
-                            .format({"Aderência %": "{:.1f}"}, na_rep="—")
+                        reg.style.format({"Aderência %": "{:.1f}"}, na_rep="—")
                             .background_gradient(cmap="Purples", subset=["Eventos"]),
                         use_container_width=True, hide_index=True,
                     )
 
-            # Por Turno
             st.markdown("**Por Turno**")
             turno = etit_por_turno(df_etit_filtrado)
             if not turno.empty:
@@ -1120,7 +1212,6 @@ if etit_loaded:
                     chart_turno = turno[["Turno", "Eventos"]].set_index("Turno")
                     st.bar_chart(chart_turno, color="#8E44AD", height=250)
 
-            # ---- Evolução Diária ETIT ----
             st.markdown("---")
             st.markdown("##### 📅 Evolução Diária ETIT")
             daily_etit = etit_evolucao_diaria(df_etit_filtrado)
@@ -1128,7 +1219,6 @@ if etit_loaded:
                 st.area_chart(daily_etit[["Data", "Eventos"]].set_index("Data"), color="#8E44AD", height=300)
                 st.line_chart(daily_etit[["Data", "Aderencia_Pct"]].set_index("Data"), color=COR_SUCESSO, height=250)
 
-            # ---- Dados Brutos ETIT ----
             st.markdown("---")
             st.markdown("##### 📋 Dados Brutos ETIT")
             etit_show_cols = [
@@ -1154,12 +1244,233 @@ if etit_loaded:
             )
 
 
+# ---- TAB: INDICADORES RESIDENCIAL ----
+if res_ind_loaded:
+    with tabs[_tab_res_idx]:
+        st.markdown("#### 🏠 Indicadores Residencial — ETIT Fibra HFC · ETIT GPON · Reprog. GPON · Assertividade")
+
+        if df_res_filtrado.empty:
+            st.warning("Nenhum dado encontrado com os filtros atuais.")
+        else:
+            # ---- KPI por indicador ----
+            kpis_df = res_kpis_por_indicador(df_res_filtrado)
+
+            # Cards de resumo — 1 por indicador
+            st.markdown("##### 📊 Resumo por Indicador")
+            n_cols = len(kpis_df)
+            ind_cols = st.columns(n_cols) if n_cols > 0 else []
+            for i, row in kpis_df.iterrows():
+                ind_name = row["Indicador"]
+                label = RES_IND_LABELS.get(ind_name, ind_name)
+                color = RES_IND_COLORS.get(ind_name, "#5DADE2")
+                vol = int(row["Volume"])
+                ader = int(row["Aderentes"])
+                pct = row["Aderencia_Pct"]
+                tma_str = f"TMA: {row['TMA_Medio']:.4f}" if "TMA_Medio" in row and pd.notna(row.get("TMA_Medio")) else ""
+                tmr_str = f"TMR: {row['TMR_Medio']:.4f}" if "TMR_Medio" in row and pd.notna(row.get("TMR_Medio")) else ""
+                extra = " · ".join(filter(None, [tma_str, tmr_str]))
+
+                pct_color = COR_SUCESSO if pct >= 90 else (COR_ALERTA if pct >= 70 else COR_PERIGO)
+
+                # Atenção: para Reprogramação, aderência alta = bom (poucos reprogramados)
+                with ind_cols[i]:
+                    st.markdown(f"""<div class="res-ind-card" style="border-top-color:{color};">
+                        <div class="ri-title">{label}</div>
+                        <div class="ri-vol" style="color:{color};">{vol:,}</div>
+                        <div class="ri-pct" style="color:{pct_color};">
+                            ✅ {ader:,} aderentes &nbsp;·&nbsp; {pct:.1f}%
+                        </div>
+                        <div class="ri-detail">{extra}</div>
+                    </div>""", unsafe_allow_html=True)
+
+            st.markdown("")
+
+            # ---- Gráfico comparativo de aderência ----
+            st.markdown("##### 📈 Comparativo de Aderência por Indicador")
+            if not kpis_df.empty:
+                chart_ader = kpis_df[["Indicador", "Aderencia_Pct"]].copy()
+                chart_ader["Indicador"] = chart_ader["Indicador"].map(RES_IND_LABELS)
+                chart_ader = chart_ader.set_index("Indicador")
+                chart_ader.columns = ["Aderência %"]
+                st.bar_chart(chart_ader, color=COR_SUCESSO, height=300)
+
+            st.markdown("---")
+
+            # ---- Breakdowns por indicador ----
+            # Definimos quais indicadores mostrar (todos ou o selecionado)
+            ind_to_show = (
+                [res_ind_selecionado]
+                if res_ind_selecionado != "Todos"
+                else RES_INDICADORES_FILTRO
+            )
+            ind_to_show = [i for i in ind_to_show if i in df_res_filtrado[RES_COL_INDICADOR_NOME].unique()]
+
+            for ind in ind_to_show:
+                label = RES_IND_LABELS.get(ind, ind)
+                color = RES_IND_COLORS.get(ind, "#5DADE2")
+                sub = df_res_filtrado[df_res_filtrado[RES_COL_INDICADOR_NOME] == ind]
+                if sub.empty:
+                    continue
+
+                vol_total = int(sub[RES_COL_VOLUME].sum())
+                ader_total = int(sub["ADERENTE"].sum())
+                pct_total = (ader_total / vol_total * 100) if vol_total > 0 else 0
+
+                with st.expander(
+                    f"🔍 {label} — {vol_total:,} registros · {pct_total:.1f}% aderência",
+                    expanded=(len(ind_to_show) == 1),
+                ):
+                    # Sub-KPIs
+                    sk1, sk2, sk3, sk4, sk5 = st.columns(5)
+                    with sk1:
+                        st.markdown(kpi_card("Volume", f"{vol_total:,}", color), unsafe_allow_html=True)
+                    with sk2:
+                        st.markdown(kpi_card("Aderentes", f"{ader_total:,}", COR_SUCESSO), unsafe_allow_html=True)
+                    with sk3:
+                        pct_c = COR_SUCESSO if pct_total >= 90 else (COR_ALERTA if pct_total >= 70 else COR_PERIGO)
+                        st.markdown(kpi_card("Aderência", f"{pct_total:.1f}", pct_c, suffix="%"), unsafe_allow_html=True)
+                    with sk4:
+                        if RES_TMA in sub.columns:
+                            tma_m = sub[RES_TMA].mean()
+                            st.markdown(kpi_card("TMA Médio", f"{tma_m:.4f}", COR_INFO), unsafe_allow_html=True)
+                    with sk5:
+                        if RES_TMR in sub.columns:
+                            tmr_m = sub[RES_TMR].mean()
+                            st.markdown(kpi_card("TMR Médio", f"{tmr_m:.4f}", COR_ALERTA), unsafe_allow_html=True)
+
+                    st.markdown("")
+
+                    # Regional + Natureza lado a lado
+                    cr, cn = st.columns(2)
+                    with cr:
+                        st.markdown("**Por Regional**")
+                        reg_df = res_por_regional(sub)
+                        if not reg_df.empty:
+                            st.dataframe(
+                                reg_df.style
+                                    .format({"Aderencia_Pct": "{:.1f}"}, na_rep="—")
+                                    .background_gradient(cmap="Blues", subset=["Volume"])
+                                    .background_gradient(cmap="RdYlGn", subset=["Aderencia_Pct"], vmin=50, vmax=100),
+                                use_container_width=True, hide_index=True,
+                            )
+                            # Mini bar chart regional
+                            chart_reg = reg_df[["Regional", "Volume"]].set_index("Regional")
+                            st.bar_chart(chart_reg, color=color, height=200)
+
+                    with cn:
+                        st.markdown("**Por Natureza**")
+                        nat_df = res_por_natureza(sub)
+                        if not nat_df.empty:
+                            st.dataframe(
+                                nat_df.style
+                                    .format({"Aderencia_Pct": "{:.1f}"}, na_rep="—")
+                                    .background_gradient(cmap="Oranges", subset=["Volume"]),
+                                use_container_width=True, hide_index=True,
+                            )
+
+                        st.markdown("**Por Impacto**")
+                        imp_df = res_por_impacto(sub)
+                        if not imp_df.empty:
+                            st.dataframe(
+                                imp_df.style
+                                    .format({"Aderencia_Pct": "{:.1f}"}, na_rep="—"),
+                                use_container_width=True, hide_index=True,
+                            )
+
+                    # Top soluções
+                    st.markdown("**Top 15 Soluções**")
+                    sol_df = res_por_solucao(sub, top_n=15)
+                    if not sol_df.empty:
+                        st.dataframe(
+                            sol_df.style
+                                .format({"Aderencia_Pct": "{:.1f}"}, na_rep="—")
+                                .background_gradient(cmap="YlOrRd", subset=["Volume"]),
+                            use_container_width=True, hide_index=True,
+                            height=350,
+                        )
+
+                    # Evolução diária
+                    st.markdown("**Evolução Diária**")
+                    evo_df = res_evolucao_diaria(sub)
+                    if not evo_df.empty:
+                        c_evo1, c_evo2 = st.columns(2)
+                        with c_evo1:
+                            st.caption("Volume diário")
+                            st.area_chart(
+                                evo_df[["Data", "Volume"]].set_index("Data"),
+                                color=color, height=200,
+                            )
+                        with c_evo2:
+                            st.caption("Aderência diária (%)")
+                            st.line_chart(
+                                evo_df[["Data", "Aderencia_Pct"]].set_index("Data"),
+                                color=COR_SUCESSO, height=200,
+                            )
+
+            # ---- Tabela consolidada com todos os indicadores ----
+            st.markdown("---")
+            st.markdown("##### 📋 Tabela Consolidada por Regional e Indicador")
+            if not kpis_df.empty:
+                pivot_list = []
+                for ind in RES_INDICADORES_FILTRO:
+                    sub = df_res_filtrado[df_res_filtrado[RES_COL_INDICADOR_NOME] == ind]
+                    if sub.empty:
+                        continue
+                    reg_df = res_por_regional(sub)
+                    if reg_df.empty:
+                        continue
+                    reg_df["Indicador"] = RES_IND_LABELS.get(ind, ind)
+                    pivot_list.append(reg_df)
+
+                if pivot_list:
+                    all_reg = pd.concat(pivot_list, ignore_index=True)
+                    try:
+                        pivot_tbl = all_reg.pivot_table(
+                            index="Regional",
+                            columns="Indicador",
+                            values="Aderencia_Pct",
+                            aggfunc="first",
+                        ).reset_index()
+                        st.dataframe(
+                            pivot_tbl.style.format(
+                                {c: "{:.1f}" for c in pivot_tbl.columns if c != "Regional"},
+                                na_rep="—",
+                            ).background_gradient(cmap="RdYlGn", vmin=50, vmax=100,
+                                subset=[c for c in pivot_tbl.columns if c != "Regional"]),
+                            use_container_width=True, hide_index=True,
+                        )
+                    except Exception:
+                        st.dataframe(all_reg, use_container_width=True, hide_index=True)
+
+            # ---- Export ----
+            st.markdown("---")
+            res_show_cols = [
+                RES_COL_INDICADOR_NOME, RES_COL_ID_MOSTRA, RES_COL_VOLUME,
+                "ADERENTE", RES_COL_STATUS, RES_REGIONAL, RES_COL_NATUREZA,
+                RES_COL_IMPACTO, RES_COL_SOLUCAO, RES_TMA, RES_TMR,
+                RES_COL_DT_INICIO, RES_ANOMES,
+            ]
+            res_show_cols = [c for c in res_show_cols if c in df_res_filtrado.columns]
+            st.dataframe(
+                df_res_filtrado[res_show_cols].sort_values(
+                    [RES_COL_DT_INICIO] if RES_COL_DT_INICIO in df_res_filtrado.columns else [RES_COL_INDICADOR_NOME],
+                    ascending=False,
+                ),
+                use_container_width=True, height=400,
+            )
+            csv_res = df_res_filtrado[res_show_cols].to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📥 Baixar Indicadores Residencial (CSV)",
+                csv_res, "indicadores_residencial.csv", "text/csv",
+            )
+
+
 # =====================================================
 # FOOTER
 # =====================================================
 st.markdown("---")
 footer_parts = [
-    f"Dashboard de Produtividade COP Rede",
+    "Dashboard de Produtividade COP Rede",
     f"{len(df_filtrado)} registros",
     f"{n_analistas} analistas",
     f"Dados de {data_min.strftime('%d/%m/%Y') if pd.notna(data_min) else '?'} "
@@ -1167,4 +1478,6 @@ footer_parts = [
 ]
 if etit_loaded:
     footer_parts.append(f"ETIT: {len(df_etit_filtrado)} eventos")
+if res_ind_loaded:
+    footer_parts.append(f"Ind. Residencial: {len(df_res_filtrado):,} registros")
 st.caption(" · ".join(footer_parts))
