@@ -25,6 +25,8 @@ from src.config import (
     RES_COL_FERRAMENTA, RES_COL_FECHAMENTO, RES_COL_SOLUCAO,
     RES_COL_IMPACTO, RES_COL_ENVIADO_TOA, RES_COL_DT_INICIO,
     RES_COL_DT_FIM, RES_COL_TMA, RES_COL_TMR, RES_COL_ANOMES,
+    # DPA Ocupação
+    DPA_MESES_PT, DPA_SHEET_ANALISTAS, DPA_SHEET_CONSOLIDADO,
 )
 
 
@@ -129,10 +131,8 @@ def load_etit(uploaded_file) -> pd.DataFrame:
 
 
 def etit_resumo_analista(df: pd.DataFrame) -> pd.DataFrame:
-    """Resumo ETIT por analista: total eventos, aderência, TMA/TMR médios, por demanda."""
     if df.empty:
         return pd.DataFrame()
-
     group = df.groupby([ETIT_COL_LOGIN, "Nome", "Setor"]).agg(
         Total_Eventos=(ETIT_COL_VOLUME, "sum"),
         Eventos_Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
@@ -141,17 +141,13 @@ def etit_resumo_analista(df: pd.DataFrame) -> pd.DataFrame:
         RAL_Count=(ETIT_COL_DEMANDA, lambda x: (x == "RAL").sum()),
         REC_Count=(ETIT_COL_DEMANDA, lambda x: (x == "REC").sum()),
     ).reset_index()
-
     group["Aderencia_Pct"] = (group["Eventos_Aderentes"] / group["Total_Eventos"] * 100).round(1)
     group["TMA_Medio"] = group["TMA_Medio"].round(4)
     group["TMR_Medio"] = group["TMR_Medio"].round(4)
-    group = group.sort_values("Total_Eventos", ascending=False).reset_index(drop=True)
-
-    return group
+    return group.sort_values("Total_Eventos", ascending=False).reset_index(drop=True)
 
 
 def etit_por_demanda(df: pd.DataFrame) -> pd.DataFrame:
-    """Breakdown por tipo de demanda (RAL/REC)."""
     if df.empty:
         return pd.DataFrame()
     return df.groupby(ETIT_COL_DEMANDA).agg(
@@ -163,7 +159,6 @@ def etit_por_demanda(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def etit_por_tipo(df: pd.DataFrame) -> pd.DataFrame:
-    """Breakdown por tipo de rede/equipamento."""
     if df.empty:
         return pd.DataFrame()
     return df.groupby(ETIT_COL_TIPO).agg(
@@ -173,7 +168,6 @@ def etit_por_tipo(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def etit_por_causa(df: pd.DataFrame) -> pd.DataFrame:
-    """Breakdown por causa."""
     if df.empty:
         return pd.DataFrame()
     return df.groupby(ETIT_COL_CAUSA).agg(
@@ -183,7 +177,6 @@ def etit_por_causa(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def etit_por_regional(df: pd.DataFrame) -> pd.DataFrame:
-    """Breakdown por regional."""
     if df.empty:
         return pd.DataFrame()
     return df.groupby(ETIT_COL_REGIONAL).agg(
@@ -193,7 +186,6 @@ def etit_por_regional(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def etit_por_turno(df: pd.DataFrame) -> pd.DataFrame:
-    """Breakdown por turno."""
     if df.empty:
         return pd.DataFrame()
     return df.groupby(ETIT_COL_TURNO).agg(
@@ -203,7 +195,6 @@ def etit_por_turno(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def etit_evolucao_diaria(df: pd.DataFrame) -> pd.DataFrame:
-    """Evolução diária de eventos ETIT."""
     if df.empty or ETIT_COL_DT_ACIONAMENTO not in df.columns:
         return pd.DataFrame()
     df_c = df.copy()
@@ -223,13 +214,6 @@ def etit_evolucao_diaria(df: pd.DataFrame) -> pd.DataFrame:
 # =====================================================
 
 def load_residencial_indicadores(uploaded_file) -> pd.DataFrame:
-    """
-    Lê a planilha Analítico Indicadores Residencial e retorna apenas
-    os 5 indicadores configurados, com tipagem correta.
-
-    Nota: esta planilha NÃO possui coluna de login individual — os dados
-    são agregados por evento/ocorrência (ID_MOSTRA).
-    """
     sheets = list_sheets(uploaded_file)
     if hasattr(uploaded_file, "seek"):
         uploaded_file.seek(0)
@@ -244,7 +228,6 @@ def load_residencial_indicadores(uploaded_file) -> pd.DataFrame:
 
     df = pd.read_excel(uploaded_file, sheet_name=sheet_to_read)
 
-    # Filtra apenas os indicadores de interesse
     if RES_COL_INDICADOR_NOME not in df.columns:
         return pd.DataFrame()
 
@@ -253,22 +236,17 @@ def load_residencial_indicadores(uploaded_file) -> pd.DataFrame:
     if df.empty:
         return df
 
-    # Garante tipos numéricos
     for c in [RES_COL_VOLUME, RES_COL_INDICADOR_VAL, RES_COL_TMA, RES_COL_TMR]:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    # Datas
     for c in [RES_COL_DT_INICIO, RES_COL_DT_FIM]:
         if c in df.columns:
             df[c] = pd.to_datetime(df[c], errors="coerce")
 
-    # ANOMES como string
     if RES_COL_ANOMES in df.columns:
         df[RES_COL_ANOMES] = df[RES_COL_ANOMES].astype(str).str.strip()
 
-    # Coluna de aderência normalizada:
-    # Para REPROGRAMAÇÃO GPON: INDICADOR=1 → NÃO ADERENTE, então invertemos
     df["ADERENTE"] = df.apply(
         lambda row: (
             (row[RES_COL_INDICADOR_VAL] == 0)
@@ -278,7 +256,6 @@ def load_residencial_indicadores(uploaded_file) -> pd.DataFrame:
         axis=1,
     ).astype(int)
 
-    # Campo de data para evolução diária
     if RES_COL_DT_INICIO in df.columns:
         df["DATA_DIA"] = df[RES_COL_DT_INICIO].dt.normalize()
 
@@ -286,25 +263,15 @@ def load_residencial_indicadores(uploaded_file) -> pd.DataFrame:
 
 
 def res_kpis_por_indicador(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Retorna uma linha por indicador com: Volume, Aderentes, Aderência %,
-    TMA médio, TMR médio.
-    """
     if df.empty:
         return pd.DataFrame()
-
     has_tma = RES_COL_TMA in df.columns
     has_tmr = RES_COL_TMR in df.columns
-
-    agg = {
-        RES_COL_VOLUME: "sum",
-        "ADERENTE": "sum",
-    }
+    agg = {RES_COL_VOLUME: "sum", "ADERENTE": "sum"}
     if has_tma:
         agg[RES_COL_TMA] = "mean"
     if has_tmr:
         agg[RES_COL_TMR] = "mean"
-
     g = df.groupby(RES_COL_INDICADOR_NOME).agg(agg).reset_index()
     g.columns = (
         ["Indicador", "Volume", "Aderentes"]
@@ -312,77 +279,64 @@ def res_kpis_por_indicador(df: pd.DataFrame) -> pd.DataFrame:
         + (["TMR_Medio"] if has_tmr else [])
     )
     g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
-
-    # Ordena pela ordem configurada
     order = {ind: i for i, ind in enumerate(RES_INDICADORES_FILTRO)}
     g["_ord"] = g["Indicador"].map(order)
-    g = g.sort_values("_ord").drop(columns="_ord").reset_index(drop=True)
-
-    return g
+    return g.sort_values("_ord").drop(columns="_ord").reset_index(drop=True)
 
 
-def res_por_regional(df: pd.DataFrame, indicador: str | None = None) -> pd.DataFrame:
-    """Breakdown por regional, opcionalmente filtrado por indicador."""
+def res_por_regional(df: pd.DataFrame, indicador=None) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
     sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
     if sub.empty:
         return pd.DataFrame()
     g = sub.groupby(RES_COL_REGIONAL).agg(
-        Volume=(RES_COL_VOLUME, "sum"),
-        Aderentes=("ADERENTE", "sum"),
+        Volume=(RES_COL_VOLUME, "sum"), Aderentes=("ADERENTE", "sum"),
     ).reset_index().rename(columns={RES_COL_REGIONAL: "Regional"})
     g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
     return g.sort_values("Volume", ascending=False).reset_index(drop=True)
 
 
-def res_por_natureza(df: pd.DataFrame, indicador: str | None = None) -> pd.DataFrame:
-    """Breakdown por natureza, opcionalmente filtrado por indicador."""
+def res_por_natureza(df: pd.DataFrame, indicador=None) -> pd.DataFrame:
     if df.empty or RES_COL_NATUREZA not in df.columns:
         return pd.DataFrame()
     sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
     if sub.empty:
         return pd.DataFrame()
     g = sub.groupby(RES_COL_NATUREZA).agg(
-        Volume=(RES_COL_VOLUME, "sum"),
-        Aderentes=("ADERENTE", "sum"),
+        Volume=(RES_COL_VOLUME, "sum"), Aderentes=("ADERENTE", "sum"),
     ).reset_index().rename(columns={RES_COL_NATUREZA: "Natureza"})
     g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
     return g.sort_values("Volume", ascending=False).reset_index(drop=True)
 
 
-def res_por_solucao(df: pd.DataFrame, indicador: str | None = None, top_n: int = 15) -> pd.DataFrame:
-    """Top causas/soluções por volume."""
+def res_por_solucao(df: pd.DataFrame, indicador=None, top_n=15) -> pd.DataFrame:
     if df.empty or RES_COL_SOLUCAO not in df.columns:
         return pd.DataFrame()
     sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
     if sub.empty:
         return pd.DataFrame()
     g = sub.groupby(RES_COL_SOLUCAO).agg(
-        Volume=(RES_COL_VOLUME, "sum"),
-        Aderentes=("ADERENTE", "sum"),
+        Volume=(RES_COL_VOLUME, "sum"), Aderentes=("ADERENTE", "sum"),
     ).reset_index().rename(columns={RES_COL_SOLUCAO: "Solução"})
     g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
     return g.sort_values("Volume", ascending=False).head(top_n).reset_index(drop=True)
 
 
-def res_por_impacto(df: pd.DataFrame, indicador: str | None = None) -> pd.DataFrame:
-    """Breakdown por impacto (Massivo / Não Massivo)."""
+def res_por_impacto(df: pd.DataFrame, indicador=None) -> pd.DataFrame:
     if df.empty or RES_COL_IMPACTO not in df.columns:
         return pd.DataFrame()
     sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
     if sub.empty:
         return pd.DataFrame()
     g = sub.groupby(RES_COL_IMPACTO).agg(
-        Volume=(RES_COL_VOLUME, "sum"),
-        Aderentes=("ADERENTE", "sum"),
+        Volume=(RES_COL_VOLUME, "sum"), Aderentes=("ADERENTE", "sum"),
     ).reset_index().rename(columns={RES_COL_IMPACTO: "Impacto"})
     g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
     return g.sort_values("Volume", ascending=False).reset_index(drop=True)
 
 
-def res_evolucao_diaria(df: pd.DataFrame, indicador: str | None = None) -> pd.DataFrame:
-    """Evolução diária de volume e aderência."""
+def res_evolucao_diaria(df: pd.DataFrame, indicador=None) -> pd.DataFrame:
     if df.empty or "DATA_DIA" not in df.columns:
         return pd.DataFrame()
     sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
@@ -390,35 +344,153 @@ def res_evolucao_diaria(df: pd.DataFrame, indicador: str | None = None) -> pd.Da
         return pd.DataFrame()
     sub = sub.dropna(subset=["DATA_DIA"])
     g = sub.groupby("DATA_DIA").agg(
-        Volume=(RES_COL_VOLUME, "sum"),
-        Aderentes=("ADERENTE", "sum"),
+        Volume=(RES_COL_VOLUME, "sum"), Aderentes=("ADERENTE", "sum"),
     ).reset_index().rename(columns={"DATA_DIA": "Data"})
     g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
     return g.sort_values("Data").reset_index(drop=True)
 
 
 # =====================================================
-# Funções originais (sem alteração)
+# OCUPAÇÃO DPA — Loader (planilha Ocupação_DPA_2026)
+# =====================================================
+
+def _dpa_detect_mes_recente(df_raw: pd.DataFrame) -> dict:
+    """
+    Varre a aba Consolidado (header=None) e retorna o último mês de 2026
+    com DPA% > 0.
+    Estrutura: col 26 = nome do mês, col 30 = % DPA 2026.
+    """
+    resultado = {"mes_nome": None, "mes_num": None, "dpa_geral_pct": None}
+    for _, row in df_raw.iterrows():
+        mes_val = str(row.get(26, "")).strip()
+        if mes_val in DPA_MESES_PT:
+            try:
+                pct_f = float(row.get(30, None))
+                if pct_f > 0:
+                    resultado = {
+                        "mes_nome": mes_val,
+                        "mes_num": DPA_MESES_PT.index(mes_val) + 1,
+                        "dpa_geral_pct": round(pct_f * 100, 2),
+                    }
+            except (TypeError, ValueError):
+                pass
+    return resultado
+
+
+def _dpa_extract_analistas(df_raw: pd.DataFrame) -> pd.DataFrame:
+    """
+    Extrai tabela de DPA por analista da aba Analistas (header=None).
+    Pivot está na col 26 (Login), col 27 (Ocupação Produtiva), col 28 (% Produtivo).
+    Procura a linha de header dinamicamente.
+    """
+    header_row = None
+    for i, row in df_raw.iterrows():
+        if str(row.get(26, "")).strip() == "Rótulos de Linha":
+            header_row = i
+            break
+    if header_row is None:
+        return pd.DataFrame()
+
+    rows = []
+    skip_tokens = {"nan", "Total Geral", "COP REDE RJ", "", "Rótulos de Linha"}
+    for i in range(header_row + 1, len(df_raw)):
+        row = df_raw.iloc[i]
+        login = str(row.get(26, "")).strip()
+        if not login or login in skip_tokens:
+            continue
+        try:
+            pct_f = float(row.get(28, None))
+            rows.append({"Login": login, "DPA_Pct_Oficial": round(pct_f * 100, 2)})
+        except (TypeError, ValueError):
+            pass
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+    # Merge com nome e setor via BASE_EQUIPE
+    df = df.merge(
+        BASE_EQUIPE[["Matricula", "Nome", "Setor"]],
+        left_on="Login", right_on="Matricula", how="inner",  # inner = somente equipe
+    ).drop(columns="Matricula")
+    df = df.sort_values("DPA_Pct_Oficial", ascending=False).reset_index(drop=True)
+    df.index += 1
+    df.index.name = "#"
+    return df
+
+
+def load_dpa_ocupacao(uploaded_file) -> tuple[pd.DataFrame, dict]:
+    """
+    Carrega a planilha Ocupação DPA 2026 e retorna:
+    - df_analistas: DataFrame com Login, Nome, Setor, DPA_Pct_Oficial
+    - mes_info: dict com mes_nome, mes_num, dpa_geral_pct
+    """
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+
+    df_consolidado = pd.read_excel(uploaded_file, sheet_name=DPA_SHEET_CONSOLIDADO, header=None)
+
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+
+    df_analistas_raw = pd.read_excel(uploaded_file, sheet_name=DPA_SHEET_ANALISTAS, header=None)
+
+    mes_info = _dpa_detect_mes_recente(df_consolidado)
+    df_analistas = _dpa_extract_analistas(df_analistas_raw)
+
+    return df_analistas, mes_info
+
+
+def dpa_ranking(df_analistas: pd.DataFrame) -> pd.DataFrame:
+    """Retorna DataFrame de ranking de DPA já ordenado."""
+    if df_analistas.empty:
+        return pd.DataFrame()
+    df = df_analistas.copy()
+    df["Nome_Curto"] = df["Nome"].apply(primeiro_nome)
+    return df[["Nome_Curto", "Login", "Setor", "DPA_Pct_Oficial"]].rename(
+        columns={"Nome_Curto": "Analista", "DPA_Pct_Oficial": "DPA %"}
+    )
+
+
+def dpa_comparativo(df_analistas: pd.DataFrame, resumo_prod: pd.DataFrame) -> pd.DataFrame:
+    """
+    Junta DPA Oficial (planilha Ocupação) com DPA calculado (planilha Produtividade).
+    Retorna DataFrame com ambos para comparação.
+    """
+    if df_analistas.empty or resumo_prod.empty:
+        return pd.DataFrame()
+
+    oficial = df_analistas[["Login", "Nome", "DPA_Pct_Oficial"]].copy()
+
+    # Verifica se DPA_Media existe no resumo
+    if "DPA_Media" not in resumo_prod.columns:
+        return oficial
+
+    calculado = resumo_prod[["USUARIO_LOGIN", "DPA_Media"]].rename(
+        columns={"USUARIO_LOGIN": "Login", "DPA_Media": "DPA_Calculado"}
+    )
+
+    merged = oficial.merge(calculado, on="Login", how="left")
+    merged["Diferença"] = (merged["DPA_Pct_Oficial"] - merged["DPA_Calculado"]).round(2)
+    merged["Nome_Curto"] = merged["Nome"].apply(primeiro_nome)
+    return merged[["Nome_Curto", "Login", "DPA_Pct_Oficial", "DPA_Calculado", "Diferença"]].rename(
+        columns={"Nome_Curto": "Analista", "DPA_Pct_Oficial": "DPA Oficial %", "DPA_Calculado": "DPA Calculado %"}
+    ).sort_values("DPA Oficial %", ascending=False).reset_index(drop=True)
+
+
+# =====================================================
+# Funções originais de produtividade
 # =====================================================
 def resumo_mensal(df: pd.DataFrame) -> pd.DataFrame:
-    """Gera resumo mensal por analista."""
-    agg_dict = {
-        COL_DATA: "count",
-        COL_VOL_TOTAL: "sum",
-    }
-
+    agg_dict = {COL_DATA: "count", COL_VOL_TOTAL: "sum"}
     for vc in VOL_COLS.keys():
         if vc in df.columns:
             agg_dict[vc] = "sum"
-
     group_cols = [COL_LOGIN, COL_NOME, "Setor", COL_MES, COL_ANOMES]
     existing_group = [c for c in group_cols if c in df.columns]
-
     g = df.groupby(existing_group).agg(agg_dict).reset_index()
     g = g.rename(columns={COL_DATA: "Dias_Trabalhados"})
-
     g["Media_Diaria"] = (g[COL_VOL_TOTAL] / g["Dias_Trabalhados"]).round(1)
-
     dpa_valid = df[(df[COL_DPA_RESULTADO] >= 0) & (df[COL_DPA_RESULTADO] <= 120)].copy()
     if not dpa_valid.empty:
         dpa_mean = dpa_valid.groupby(existing_group)[COL_DPA_RESULTADO].mean().reset_index()
@@ -427,27 +499,19 @@ def resumo_mensal(df: pd.DataFrame) -> pd.DataFrame:
         g = g.merge(dpa_mean, on=existing_group, how="left")
     else:
         g["DPA_Media"] = np.nan
-
     return g
 
 
 def resumo_geral(df: pd.DataFrame) -> pd.DataFrame:
-    """Gera resumo geral (todos os meses) por analista."""
-    agg_dict = {
-        COL_DATA: "count",
-        COL_VOL_TOTAL: "sum",
-    }
+    agg_dict = {COL_DATA: "count", COL_VOL_TOTAL: "sum"}
     for vc in VOL_COLS.keys():
         if vc in df.columns:
             agg_dict[vc] = "sum"
-
     group_cols = [COL_LOGIN, COL_NOME, "Setor"]
     existing_group = [c for c in group_cols if c in df.columns]
-
     g = df.groupby(existing_group).agg(agg_dict).reset_index()
     g = g.rename(columns={COL_DATA: "Dias_Trabalhados"})
     g["Media_Diaria"] = (g[COL_VOL_TOTAL] / g["Dias_Trabalhados"]).round(1)
-
     dpa_valid = df[(df[COL_DPA_RESULTADO] >= 0) & (df[COL_DPA_RESULTADO] <= 120)].copy()
     if not dpa_valid.empty:
         dpa_mean = dpa_valid.groupby(existing_group)[COL_DPA_RESULTADO].mean().reset_index()
@@ -456,12 +520,10 @@ def resumo_geral(df: pd.DataFrame) -> pd.DataFrame:
         g = g.merge(dpa_mean, on=existing_group, how="left")
     else:
         g["DPA_Media"] = np.nan
-
     return g
 
 
 def evolucao_diaria(df: pd.DataFrame) -> pd.DataFrame:
-    """Volume total diário da equipe inteira."""
     if COL_DATA not in df.columns:
         return pd.DataFrame()
     daily = df.groupby(COL_DATA).agg(
@@ -473,7 +535,6 @@ def evolucao_diaria(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def composicao_volume(df: pd.DataFrame) -> pd.DataFrame:
-    """Composição do volume por tipo de atividade."""
     vol_data = {}
     for col, label in VOL_COLS.items():
         if col in df.columns:
@@ -486,7 +547,6 @@ def composicao_volume(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def primeiro_nome(nome_completo: str) -> str:
-    """Retorna primeiro + último nome para display compacto."""
     parts = str(nome_completo).strip().split()
     if len(parts) <= 2:
         return nome_completo
