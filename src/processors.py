@@ -619,7 +619,14 @@ def load_toa_indicadores(uploaded_file) -> pd.DataFrame:
 
     # TMR já vem como timedelta; converter para minutos para facilitar análise
     if TOA_COL_TMR in df.columns:
-        df["TMR_min"] = df[TOA_COL_TMR].dt.total_seconds() / 60
+        try:
+            if pd.api.types.is_timedelta64_dtype(df[TOA_COL_TMR]):
+                df["TMR_min"] = df[TOA_COL_TMR].dt.total_seconds() / 60
+            else:
+                df[TOA_COL_TMR] = pd.to_timedelta(df[TOA_COL_TMR], errors="coerce")
+                df["TMR_min"] = df[TOA_COL_TMR].dt.total_seconds() / 60
+        except Exception:
+            df["TMR_min"] = pd.to_numeric(df[TOA_COL_TMR], errors="coerce")
 
     # Coluna ADERENTE normalizada:
     # Canceladas: INDICADOR=1 → NÃO ADERENTE → invertemos
