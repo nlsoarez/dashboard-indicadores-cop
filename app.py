@@ -853,9 +853,11 @@ with tabs[0]:
                 rank_dpa_of = dpa_ranking(df_dpa_filtrado)
                 rank_dpa_of = rank_dpa_of[~rank_dpa_of["Login"].isin(LIDERES_IDS)].reset_index(drop=True)
                 rank_dpa_of.index += 1; rank_dpa_of.index.name = "#"
+                _dpa_g = dpa_mes_info.get('dpa_geral_pct')
+                _dpa_g_str = f"{_dpa_g:.1f}%" if _dpa_g is not None else "?"
                 st.caption(
-                    f"📌 DPA Oficial — {dpa_mes_info.get('mes_nome','?')} "
-                    f"(média geral da equipe: {dpa_mes_info.get('dpa_geral_pct','?'):.1f}%)"
+                    f"📌 DPA Oficial — {dpa_mes_info.get('mes_nome') or '?'} "
+                    f"(média geral da equipe: {_dpa_g_str})"
                 )
 
                 # Adicionar semáforo
@@ -1612,7 +1614,9 @@ if toa_loaded and _tab_toa_idx is not None:
                     st.markdown(kpi_card("Aderência Média", f"{media_ader_sv:.1f}", pct_c_sv, suffix="%"), unsafe_allow_html=True)
                 with sv2:
                     st.markdown(kpi_card("TMR Médio (min)", f"{media_tmr_sv:.1f}", COR_INFO), unsafe_allow_html=True)
-                sub_sv_show = sub_sv[["Analista", "Total", "Aderência %", "TMR Médio (min)"]].reset_index(drop=True)
+                sub_sv_show = sub_sv[["Analista", "Total", "Aderencia_Pct", "TMR_Medio_min"]].copy()
+                sub_sv_show.columns = ["Analista", "Total", "Aderência %", "TMR Médio (min)"]
+                sub_sv_show = sub_sv_show.reset_index(drop=True)
                 sub_sv_show.index += 1; sub_sv_show.index.name = "#"
                 st.dataframe(
                     sub_sv_show.style
