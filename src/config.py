@@ -71,7 +71,6 @@ VOL_COLS = {
     "VOL_TELEFONIA_REALIZADO": "Ligações Realizadas",
 }
 
-# Volume columns grouped by sector
 VOL_COLS_RESIDENCIAL = {
     "VOL_AB_NM": "Ab. New Monitor",
     "VOL_FE_NM": "Fech. New Monitor",
@@ -137,14 +136,11 @@ ETIT_COL_TMA = "TMA"
 ETIT_COL_TMR = "TMR"
 ETIT_COL_ANOMES = "ANOMES"
 
-# Abas possíveis na planilha ETIT
 ETIT_SHEET_CANDIDATES = ["Empresarial", "ETIT", "Analítico"]
 
 # =====================================================
 # INDICADORES RESIDENCIAL — Planilha Analítico Indicadores
 # =====================================================
-
-# Indicadores que queremos extrair (exatamente como aparecem na coluna)
 RES_IND_ETIT_FIBRA_HFC        = "ETIT FIBRA HFC"
 RES_IND_ETIT_GPON              = "ETIT GPON"
 RES_IND_REPROG_GPON            = "REPROGRAMAÇÃO GPON"
@@ -159,7 +155,6 @@ RES_INDICADORES_FILTRO = [
     RES_IND_ASSERT_GPON,
 ]
 
-# Rótulos curtos para exibição
 RES_IND_LABELS = {
     RES_IND_ETIT_FIBRA_HFC:   "ETIT Fibra HFC",
     RES_IND_ETIT_GPON:         "ETIT GPON",
@@ -168,7 +163,6 @@ RES_IND_LABELS = {
     RES_IND_ASSERT_GPON:       "Assert. GPON",
 }
 
-# Cores por indicador
 RES_IND_COLORS = {
     RES_IND_ETIT_FIBRA_HFC:   "#E67E22",
     RES_IND_ETIT_GPON:         "#8E44AD",
@@ -177,11 +171,8 @@ RES_IND_COLORS = {
     RES_IND_ASSERT_GPON:       "#16A085",
 }
 
-# Para REPROGRAMAÇÃO: INDICADOR=1 = NÃO ADERENTE (reprogramado = ruim)
-# Para os demais:     INDICADOR=1 = ADERENTE
 RES_IND_INVERTIDOS = {RES_IND_REPROG_GPON}
 
-# Colunas da planilha
 RES_COL_INDICADOR_NOME  = "INDICADOR_NOME_ICG"
 RES_COL_ID_MOSTRA       = "ID_MOSTRA"
 RES_COL_VOLUME          = "VOLUME"
@@ -206,8 +197,29 @@ RES_COL_TMA             = "TMA"
 RES_COL_TMR             = "TMR"
 RES_COL_ANOMES          = "ANOMES"
 
-# Abas possíveis na planilha de Indicadores Residencial
 RES_SHEET_CANDIDATES = ["Analitico", "Analítico", "Residencial", "Sheet1"]
+
+# =====================================================
+# OCUPAÇÃO DPA — Planilha Ocupação_DPA_2026
+# =====================================================
+
+# Nomes das abas na planilha de Ocupação DPA
+DPA_SHEET_ANALISTAS   = "Analistas"
+DPA_SHEET_CONSOLIDADO = "Consolidado"
+
+# Lista de meses em português (para detectar o mês mais recente)
+DPA_MESES_PT = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+]
+
+# Thresholds de semáforo para DPA%
+DPA_THRESHOLD_OK      = 90.0   # >= verde
+DPA_THRESHOLD_ALERTA  = 80.0   # >= amarelo, < verde
+# abaixo de DPA_THRESHOLD_ALERTA = vermelho
+
+# Abas possíveis (candidatos, caso os nomes mudem)
+DPA_SHEET_CANDIDATES = ["Analistas", "Analisats", "Analistas DPA"]
 
 # =====================================================
 # CORES DO DASHBOARD
