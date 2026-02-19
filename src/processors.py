@@ -60,7 +60,8 @@ def load_produtividade(uploaded_file) -> pd.DataFrame:
 
     df = pd.read_excel(uploaded_file, sheet_name=sheet_to_read, header=HEADER_ROW)
 
-    # Remove coluna unnamed
+    # Remove colunas sem cabeçalho (Unnamed ou NaN)
+    df.columns = [str(c) for c in df.columns]
     df = df.loc[:, ~df.columns.str.startswith("Unnamed")]
 
     # Filtra equipe
