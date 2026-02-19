@@ -141,6 +141,75 @@ ETIT_COL_ANOMES = "ANOMES"
 ETIT_SHEET_CANDIDATES = ["Empresarial", "ETIT", "Analítico"]
 
 # =====================================================
+# INDICADORES RESIDENCIAL — Planilha Analítico Indicadores
+# =====================================================
+
+# Indicadores que queremos extrair (exatamente como aparecem na coluna)
+RES_IND_ETIT_FIBRA_HFC        = "ETIT FIBRA HFC"
+RES_IND_ETIT_GPON              = "ETIT GPON"
+RES_IND_REPROG_GPON            = "REPROGRAMAÇÃO GPON"
+RES_IND_ASSERT_FIBRA_HFC       = "ASSERTIVIDADE ACIONAMENTO FIBRA HFC"
+RES_IND_ASSERT_GPON            = "ASSERTIVIDADE ACIONAMENTO GPON"
+
+RES_INDICADORES_FILTRO = [
+    RES_IND_ETIT_FIBRA_HFC,
+    RES_IND_ETIT_GPON,
+    RES_IND_REPROG_GPON,
+    RES_IND_ASSERT_FIBRA_HFC,
+    RES_IND_ASSERT_GPON,
+]
+
+# Rótulos curtos para exibição
+RES_IND_LABELS = {
+    RES_IND_ETIT_FIBRA_HFC:   "ETIT Fibra HFC",
+    RES_IND_ETIT_GPON:         "ETIT GPON",
+    RES_IND_REPROG_GPON:       "Reprog. GPON",
+    RES_IND_ASSERT_FIBRA_HFC:  "Assert. Fibra HFC",
+    RES_IND_ASSERT_GPON:       "Assert. GPON",
+}
+
+# Cores por indicador
+RES_IND_COLORS = {
+    RES_IND_ETIT_FIBRA_HFC:   "#E67E22",
+    RES_IND_ETIT_GPON:         "#8E44AD",
+    RES_IND_REPROG_GPON:       "#2980B9",
+    RES_IND_ASSERT_FIBRA_HFC:  "#27AE60",
+    RES_IND_ASSERT_GPON:       "#16A085",
+}
+
+# Para REPROGRAMAÇÃO: INDICADOR=1 = NÃO ADERENTE (reprogramado = ruim)
+# Para os demais:     INDICADOR=1 = ADERENTE
+RES_IND_INVERTIDOS = {RES_IND_REPROG_GPON}
+
+# Colunas da planilha
+RES_COL_INDICADOR_NOME  = "INDICADOR_NOME_ICG"
+RES_COL_ID_MOSTRA       = "ID_MOSTRA"
+RES_COL_VOLUME          = "VOLUME"
+RES_COL_INDICADOR_VAL   = "INDICADOR"
+RES_COL_STATUS          = "INDICADOR_STATUS"
+RES_COL_REGIONAL        = "IN_REGIONAL"
+RES_COL_GRUPO           = "IN_GRUPO"
+RES_COL_CIDADE          = "IN_CIDADE_UF"
+RES_COL_UF              = "IN_UF"
+RES_COL_TECNOLOGIA      = "TECNOLOGIA"
+RES_COL_SERVICO         = "SERVICO"
+RES_COL_NATUREZA        = "NATUREZA"
+RES_COL_SINTOMA         = "SINTOMA"
+RES_COL_FERRAMENTA      = "FERRAMENTA_ABERTURA"
+RES_COL_FECHAMENTO      = "FECHAMENTO"
+RES_COL_SOLUCAO         = "SOLUCAO"
+RES_COL_IMPACTO         = "IMPACTO"
+RES_COL_ENVIADO_TOA     = "ENVIADO_TOA"
+RES_COL_DT_INICIO       = "DT_INICIO"
+RES_COL_DT_FIM          = "DT_FIM"
+RES_COL_TMA             = "TMA"
+RES_COL_TMR             = "TMR"
+RES_COL_ANOMES          = "ANOMES"
+
+# Abas possíveis na planilha de Indicadores Residencial
+RES_SHEET_CANDIDATES = ["Analitico", "Analítico", "Residencial", "Sheet1"]
+
+# =====================================================
 # CORES DO DASHBOARD
 # =====================================================
 COR_PRIMARIA = "#1B4F72"
