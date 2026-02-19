@@ -182,6 +182,30 @@ st.markdown("""
 
 
 # =====================================================
+# CACHED DATA LOADERS (parse Excel only once per file)
+# =====================================================
+@st.cache_data(show_spinner=False)
+def _cached_load_produtividade(file_bytes):
+    return load_produtividade(io.BytesIO(file_bytes))
+
+@st.cache_data(show_spinner=False)
+def _cached_load_etit(file_bytes):
+    return load_etit(io.BytesIO(file_bytes))
+
+@st.cache_data(show_spinner=False)
+def _cached_load_residencial(file_bytes):
+    return load_residencial_indicadores(io.BytesIO(file_bytes))
+
+@st.cache_data(show_spinner=False)
+def _cached_load_dpa(file_bytes):
+    return load_dpa_ocupacao(io.BytesIO(file_bytes))
+
+@st.cache_data(show_spinner=False)
+def _cached_load_toa(file_bytes):
+    return load_toa_indicadores(io.BytesIO(file_bytes))
+
+
+# =====================================================
 # HELPERS
 # =====================================================
 def kpi_card(label, value, color, delta=None, suffix=""):
@@ -462,8 +486,7 @@ if "uploaded_bytes" not in st.session_state:
 # =====================================================
 try:
     with st.spinner("Carregando e processando dados de produtividade..."):
-        file_obj = io.BytesIO(st.session_state["uploaded_bytes"])
-        df = load_produtividade(file_obj)
+        df = _cached_load_produtividade(st.session_state["uploaded_bytes"])
     if df.empty:
         st.error("Nenhum analista da equipe encontrado na planilha de produtividade.")
         st.stop()
@@ -483,8 +506,7 @@ etit_loaded = False
 if "uploaded_etit_bytes" in st.session_state:
     try:
         with st.spinner("Carregando dados ETIT POR EVENTO..."):
-            etit_obj = io.BytesIO(st.session_state["uploaded_etit_bytes"])
-            df_etit = load_etit(etit_obj)
+            df_etit = _cached_load_etit(st.session_state["uploaded_etit_bytes"])
             etit_loaded = not df_etit.empty
             if not etit_loaded:
                 st.warning("Nenhum analista da equipe encontrado nos dados ETIT POR EVENTO.")
@@ -503,8 +525,7 @@ res_ind_loaded = False
 if "uploaded_res_ind_bytes" in st.session_state:
     try:
         with st.spinner("Carregando Indicadores Residencial..."):
-            res_ind_obj = io.BytesIO(st.session_state["uploaded_res_ind_bytes"])
-            df_res_ind = load_residencial_indicadores(res_ind_obj)
+            df_res_ind = _cached_load_residencial(st.session_state["uploaded_res_ind_bytes"])
             res_ind_loaded = not df_res_ind.empty
             if not res_ind_loaded:
                 st.warning("Nenhum dado dos indicadores selecionados encontrado na planilha.")
@@ -524,8 +545,7 @@ dpa_loaded = False
 if "uploaded_dpa_bytes" in st.session_state:
     try:
         with st.spinner("Carregando Ocupação DPA..."):
-            dpa_obj = io.BytesIO(st.session_state["uploaded_dpa_bytes"])
-            df_dpa, dpa_mes_info = load_dpa_ocupacao(dpa_obj)
+            df_dpa, dpa_mes_info = _cached_load_dpa(st.session_state["uploaded_dpa_bytes"])
             dpa_loaded = not df_dpa.empty
             if not dpa_loaded:
                 st.warning("Nenhum analista da equipe encontrado na planilha de Ocupação DPA.")
@@ -545,8 +565,7 @@ toa_anomes = None
 if "uploaded_toa_bytes" in st.session_state:
     try:
         with st.spinner("Carregando Indicadores TOA..."):
-            toa_obj = io.BytesIO(st.session_state["uploaded_toa_bytes"])
-            df_toa = load_toa_indicadores(toa_obj)
+            df_toa = _cached_load_toa(st.session_state["uploaded_toa_bytes"])
             toa_loaded = not df_toa.empty
             if toa_loaded and "ANOMES" in df_toa.columns:
                 toa_anomes = int(df_toa["ANOMES"].max())
