@@ -16,6 +16,15 @@ from src.config import (
     ETIT_COL_DT_ACIONAMENTO, ETIT_COL_TURNO,
     ETIT_COL_TMA, ETIT_COL_TMR, ETIT_COL_ANOMES,
     ETIT_SHEET_CANDIDATES, ETIT_COL_INDICADOR_VAL,
+    # Residencial Indicadores
+    RES_INDICADORES_FILTRO, RES_IND_INVERTIDOS, RES_SHEET_CANDIDATES,
+    RES_COL_INDICADOR_NOME, RES_COL_ID_MOSTRA, RES_COL_VOLUME,
+    RES_COL_INDICADOR_VAL, RES_COL_STATUS, RES_COL_REGIONAL,
+    RES_COL_GRUPO, RES_COL_CIDADE, RES_COL_UF, RES_COL_TECNOLOGIA,
+    RES_COL_SERVICO, RES_COL_NATUREZA, RES_COL_SINTOMA,
+    RES_COL_FERRAMENTA, RES_COL_FECHAMENTO, RES_COL_SOLUCAO,
+    RES_COL_IMPACTO, RES_COL_ENVIADO_TOA, RES_COL_DT_INICIO,
+    RES_COL_DT_FIM, RES_COL_TMA, RES_COL_TMR, RES_COL_ANOMES,
 )
 
 
@@ -207,6 +216,185 @@ def etit_evolucao_diaria(df: pd.DataFrame) -> pd.DataFrame:
     daily["Data"] = pd.to_datetime(daily["Data"])
     daily["Aderencia_Pct"] = (daily["Aderentes"] / daily["Eventos"] * 100).round(1)
     return daily
+
+
+# =====================================================
+# INDICADORES RESIDENCIAL — Loader e processadores
+# =====================================================
+
+def load_residencial_indicadores(uploaded_file) -> pd.DataFrame:
+    """
+    Lê a planilha Analítico Indicadores Residencial e retorna apenas
+    os 5 indicadores configurados, com tipagem correta.
+
+    Nota: esta planilha NÃO possui coluna de login individual — os dados
+    são agregados por evento/ocorrência (ID_MOSTRA).
+    """
+    sheets = list_sheets(uploaded_file)
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+
+    sheet_to_read = None
+    for candidate in RES_SHEET_CANDIDATES:
+        if candidate in sheets:
+            sheet_to_read = candidate
+            break
+    if sheet_to_read is None:
+        sheet_to_read = sheets[0]
+
+    df = pd.read_excel(uploaded_file, sheet_name=sheet_to_read)
+
+    # Filtra apenas os indicadores de interesse
+    if RES_COL_INDICADOR_NOME not in df.columns:
+        return pd.DataFrame()
+
+    df = df[df[RES_COL_INDICADOR_NOME].isin(RES_INDICADORES_FILTRO)].copy()
+
+    if df.empty:
+        return df
+
+    # Garante tipos numéricos
+    for c in [RES_COL_VOLUME, RES_COL_INDICADOR_VAL, RES_COL_TMA, RES_COL_TMR]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # Datas
+    for c in [RES_COL_DT_INICIO, RES_COL_DT_FIM]:
+        if c in df.columns:
+            df[c] = pd.to_datetime(df[c], errors="coerce")
+
+    # ANOMES como string
+    if RES_COL_ANOMES in df.columns:
+        df[RES_COL_ANOMES] = df[RES_COL_ANOMES].astype(str).str.strip()
+
+    # Coluna de aderência normalizada:
+    # Para REPROGRAMAÇÃO GPON: INDICADOR=1 → NÃO ADERENTE, então invertemos
+    df["ADERENTE"] = df.apply(
+        lambda row: (
+            (row[RES_COL_INDICADOR_VAL] == 0)
+            if row[RES_COL_INDICADOR_NOME] in RES_IND_INVERTIDOS
+            else (row[RES_COL_INDICADOR_VAL] == 1)
+        ),
+        axis=1,
+    ).astype(int)
+
+    # Campo de data para evolução diária
+    if RES_COL_DT_INICIO in df.columns:
+        df["DATA_DIA"] = df[RES_COL_DT_INICIO].dt.normalize()
+
+    return df
+
+
+def res_kpis_por_indicador(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Retorna uma linha por indicador com: Volume, Aderentes, Aderência %,
+    TMA médio, TMR médio.
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    has_tma = RES_COL_TMA in df.columns
+    has_tmr = RES_COL_TMR in df.columns
+
+    agg = {
+        RES_COL_VOLUME: "sum",
+        "ADERENTE": "sum",
+    }
+    if has_tma:
+        agg[RES_COL_TMA] = "mean"
+    if has_tmr:
+        agg[RES_COL_TMR] = "mean"
+
+    g = df.groupby(RES_COL_INDICADOR_NOME).agg(agg).reset_index()
+    g.columns = (
+        ["Indicador", "Volume", "Aderentes"]
+        + (["TMA_Medio"] if has_tma else [])
+        + (["TMR_Medio"] if has_tmr else [])
+    )
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
+
+    # Ordena pela ordem configurada
+    order = {ind: i for i, ind in enumerate(RES_INDICADORES_FILTRO)}
+    g["_ord"] = g["Indicador"].map(order)
+    g = g.sort_values("_ord").drop(columns="_ord").reset_index(drop=True)
+
+    return g
+
+
+def res_por_regional(df: pd.DataFrame, indicador: str | None = None) -> pd.DataFrame:
+    """Breakdown por regional, opcionalmente filtrado por indicador."""
+    if df.empty:
+        return pd.DataFrame()
+    sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
+    if sub.empty:
+        return pd.DataFrame()
+    g = sub.groupby(RES_COL_REGIONAL).agg(
+        Volume=(RES_COL_VOLUME, "sum"),
+        Aderentes=("ADERENTE", "sum"),
+    ).reset_index().rename(columns={RES_COL_REGIONAL: "Regional"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
+    return g.sort_values("Volume", ascending=False).reset_index(drop=True)
+
+
+def res_por_natureza(df: pd.DataFrame, indicador: str | None = None) -> pd.DataFrame:
+    """Breakdown por natureza, opcionalmente filtrado por indicador."""
+    if df.empty or RES_COL_NATUREZA not in df.columns:
+        return pd.DataFrame()
+    sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
+    if sub.empty:
+        return pd.DataFrame()
+    g = sub.groupby(RES_COL_NATUREZA).agg(
+        Volume=(RES_COL_VOLUME, "sum"),
+        Aderentes=("ADERENTE", "sum"),
+    ).reset_index().rename(columns={RES_COL_NATUREZA: "Natureza"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
+    return g.sort_values("Volume", ascending=False).reset_index(drop=True)
+
+
+def res_por_solucao(df: pd.DataFrame, indicador: str | None = None, top_n: int = 15) -> pd.DataFrame:
+    """Top causas/soluções por volume."""
+    if df.empty or RES_COL_SOLUCAO not in df.columns:
+        return pd.DataFrame()
+    sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
+    if sub.empty:
+        return pd.DataFrame()
+    g = sub.groupby(RES_COL_SOLUCAO).agg(
+        Volume=(RES_COL_VOLUME, "sum"),
+        Aderentes=("ADERENTE", "sum"),
+    ).reset_index().rename(columns={RES_COL_SOLUCAO: "Solução"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
+    return g.sort_values("Volume", ascending=False).head(top_n).reset_index(drop=True)
+
+
+def res_por_impacto(df: pd.DataFrame, indicador: str | None = None) -> pd.DataFrame:
+    """Breakdown por impacto (Massivo / Não Massivo)."""
+    if df.empty or RES_COL_IMPACTO not in df.columns:
+        return pd.DataFrame()
+    sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
+    if sub.empty:
+        return pd.DataFrame()
+    g = sub.groupby(RES_COL_IMPACTO).agg(
+        Volume=(RES_COL_VOLUME, "sum"),
+        Aderentes=("ADERENTE", "sum"),
+    ).reset_index().rename(columns={RES_COL_IMPACTO: "Impacto"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
+    return g.sort_values("Volume", ascending=False).reset_index(drop=True)
+
+
+def res_evolucao_diaria(df: pd.DataFrame, indicador: str | None = None) -> pd.DataFrame:
+    """Evolução diária de volume e aderência."""
+    if df.empty or "DATA_DIA" not in df.columns:
+        return pd.DataFrame()
+    sub = df[df[RES_COL_INDICADOR_NOME] == indicador] if indicador else df
+    if sub.empty:
+        return pd.DataFrame()
+    sub = sub.dropna(subset=["DATA_DIA"])
+    g = sub.groupby("DATA_DIA").agg(
+        Volume=(RES_COL_VOLUME, "sum"),
+        Aderentes=("ADERENTE", "sum"),
+    ).reset_index().rename(columns={"DATA_DIA": "Data"})
+    g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
+    return g.sort_values("Data").reset_index(drop=True)
 
 
 # =====================================================
