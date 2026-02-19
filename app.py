@@ -181,26 +181,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# =====================================================
-# CACHED DATA LOADERS — session_state based (avoids pickle serialization issues)
-# =====================================================
-def _load_with_cache(cache_key, loader_fn, file_bytes):
-    """
-    Carrega dados usando cache no session_state.
-    Evita problemas de serialização do @st.cache_data com tipos complexos
-    (Timedelta, tuple, etc.).
-    """
-    hash_key = f"_cache_{cache_key}_hash"
-    data_key = f"_cache_{cache_key}_data"
-    current_hash = hash(file_bytes)
-
-    if hash_key in st.session_state and st.session_state[hash_key] == current_hash:
-        return st.session_state[data_key]
-
-    result = loader_fn(io.BytesIO(file_bytes))
-    st.session_state[hash_key] = current_hash
-    st.session_state[data_key] = result
-    return result
+# (loaders são chamados diretamente — sem cache, para máxima confiabilidade)
 
 
 # =====================================================
@@ -484,7 +465,7 @@ if "uploaded_bytes" not in st.session_state:
 # =====================================================
 try:
     with st.spinner("Carregando e processando dados de produtividade..."):
-        df = _load_with_cache("produtividade", load_produtividade, st.session_state["uploaded_bytes"])
+        df = load_produtividade(io.BytesIO(st.session_state["uploaded_bytes"]))
     if df.empty:
         st.error("Nenhum analista da equipe encontrado na planilha de produtividade.")
         st.stop()
@@ -504,13 +485,15 @@ etit_loaded = False
 if "uploaded_etit_bytes" in st.session_state:
     try:
         with st.spinner("Carregando dados ETIT POR EVENTO..."):
-            df_etit = _load_with_cache("etit", load_etit, st.session_state["uploaded_etit_bytes"])
+            df_etit = load_etit(io.BytesIO(st.session_state["uploaded_etit_bytes"]))
             etit_loaded = not df_etit.empty
             if not etit_loaded:
-                st.warning("Nenhum analista da equipe encontrado nos dados ETIT POR EVENTO.")
+                st.warning("⚠️ ETIT: Planilha carregada mas nenhum analista da equipe encontrado.")
+            else:
+                st.toast(f"✅ ETIT carregado: {len(df_etit)} registros")
     except Exception as e:
         st.error(f"❌ Erro ao processar planilha ETIT: {e}")
-        with st.expander("Detalhes do erro ETIT"):
+        with st.expander("Detalhes do erro ETIT", expanded=True):
             st.code(traceback.format_exc())
 
 
@@ -523,13 +506,15 @@ res_ind_loaded = False
 if "uploaded_res_ind_bytes" in st.session_state:
     try:
         with st.spinner("Carregando Indicadores Residencial..."):
-            df_res_ind = _load_with_cache("res_ind", load_residencial_indicadores, st.session_state["uploaded_res_ind_bytes"])
+            df_res_ind = load_residencial_indicadores(io.BytesIO(st.session_state["uploaded_res_ind_bytes"]))
             res_ind_loaded = not df_res_ind.empty
             if not res_ind_loaded:
-                st.warning("Nenhum dado dos indicadores selecionados encontrado na planilha.")
+                st.warning("⚠️ Residencial: Planilha carregada mas nenhum indicador encontrado.")
+            else:
+                st.toast(f"✅ Residencial carregado: {len(df_res_ind)} registros")
     except Exception as e:
         st.error(f"❌ Erro ao processar planilha de Indicadores Residencial: {e}")
-        with st.expander("Detalhes do erro Residencial"):
+        with st.expander("Detalhes do erro Residencial", expanded=True):
             st.code(traceback.format_exc())
 
 
@@ -543,13 +528,15 @@ dpa_loaded = False
 if "uploaded_dpa_bytes" in st.session_state:
     try:
         with st.spinner("Carregando Ocupação DPA..."):
-            df_dpa, dpa_mes_info = _load_with_cache("dpa", load_dpa_ocupacao, st.session_state["uploaded_dpa_bytes"])
+            df_dpa, dpa_mes_info = load_dpa_ocupacao(io.BytesIO(st.session_state["uploaded_dpa_bytes"]))
             dpa_loaded = not df_dpa.empty
             if not dpa_loaded:
-                st.warning("Nenhum analista da equipe encontrado na planilha de Ocupação DPA.")
+                st.warning("⚠️ DPA: Planilha carregada mas nenhum analista da equipe encontrado.")
+            else:
+                st.toast(f"✅ DPA carregado: {len(df_dpa)} analistas")
     except Exception as e:
         st.error(f"❌ Erro ao processar planilha de Ocupação DPA: {e}")
-        with st.expander("Detalhes do erro DPA"):
+        with st.expander("Detalhes do erro DPA", expanded=True):
             st.code(traceback.format_exc())
 
 
@@ -563,15 +550,17 @@ toa_anomes = None
 if "uploaded_toa_bytes" in st.session_state:
     try:
         with st.spinner("Carregando Indicadores TOA..."):
-            df_toa = _load_with_cache("toa", load_toa_indicadores, st.session_state["uploaded_toa_bytes"])
+            df_toa = load_toa_indicadores(io.BytesIO(st.session_state["uploaded_toa_bytes"]))
             toa_loaded = not df_toa.empty
             if toa_loaded and "ANOMES" in df_toa.columns:
                 toa_anomes = int(df_toa["ANOMES"].max())
             if not toa_loaded:
-                st.warning("Nenhum analista da equipe encontrado nos Indicadores TOA.")
+                st.warning("⚠️ TOA: Planilha carregada mas nenhum analista da equipe encontrado.")
+            else:
+                st.toast(f"✅ TOA carregado: {len(df_toa)} registros")
     except Exception as e:
         st.error(f"❌ Erro ao processar planilha de Indicadores TOA: {e}")
-        with st.expander("Detalhes do erro TOA"):
+        with st.expander("Detalhes do erro TOA", expanded=True):
             st.code(traceback.format_exc())
 
 
@@ -605,10 +594,6 @@ with st.sidebar:
             "uploaded_dpa_bytes", "uploaded_dpa_bytes_name",
         ]:
             st.session_state.pop(key, None)
-        # Limpa cache de dados processados
-        for ck in ["produtividade", "etit", "res_ind", "dpa", "toa"]:
-            st.session_state.pop(f"_cache_{ck}_hash", None)
-            st.session_state.pop(f"_cache_{ck}_data", None)
         st.rerun()
 
     st.markdown("---")
@@ -624,20 +609,43 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### 📋 Status dos dados")
+
+    # Diagnóstico de uploads
+    _upload_keys = {
+        "ETIT": "uploaded_etit_bytes",
+        "Residencial": "uploaded_res_ind_bytes",
+        "TOA": "uploaded_toa_bytes",
+        "DPA": "uploaded_dpa_bytes",
+    }
+    for _label, _key in _upload_keys.items():
+        if _key in st.session_state:
+            _sz = len(st.session_state[_key])
+            st.caption(f"📎 {_label}: {_sz:,} bytes carregados")
+        else:
+            st.caption(f"⬜ {_label}: não carregado")
+
     if etit_loaded:
         st.success(f"✅ ETIT: {len(df_etit)} eventos")
+    elif "uploaded_etit_bytes" in st.session_state:
+        st.warning("⚠️ ETIT: planilha carregada mas sem dados da equipe")
     if res_ind_loaded:
         st.success(f"✅ Ind. Residencial: {len(df_res_ind):,} registros")
+    elif "uploaded_res_ind_bytes" in st.session_state:
+        st.warning("⚠️ Residencial: planilha carregada mas sem dados")
     if toa_loaded:
         anomes_str = str(toa_anomes) if toa_anomes else "?"
         n_canc = len(df_toa[df_toa["INDICADOR_NOME"] == "TAREFAS CANCELADAS"]) if toa_loaded else 0
         n_val  = len(df_toa[df_toa["INDICADOR_NOME"] == "TEMPO DE VALIDAÇÃO DO FORMULÁRIO"]) if toa_loaded else 0
         st.success(f"✅ TOA {anomes_str}: {n_canc} canceladas · {n_val} validações")
+    elif "uploaded_toa_bytes" in st.session_state:
+        st.warning("⚠️ TOA: planilha carregada mas sem dados da equipe")
     if dpa_loaded:
         mes_label = dpa_mes_info.get("mes_nome", "?")
         dpa_geral = dpa_mes_info.get("dpa_geral_pct")
         dpa_g_str = f" · {dpa_geral:.1f}%" if dpa_geral else ""
         st.success(f"✅ Ocup. DPA: {len(df_dpa)} analistas · {mes_label}{dpa_g_str}")
+    elif "uploaded_dpa_bytes" in st.session_state:
+        st.warning("⚠️ DPA: planilha carregada mas sem dados da equipe")
 
     # Filtro Indicadores Residencial
     if res_ind_loaded:
