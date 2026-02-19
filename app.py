@@ -536,6 +536,29 @@ if "uploaded_dpa_bytes" in st.session_state:
 
 
 # =====================================================
+# PROCESSAR DADOS — Indicadores TOA (opcional)
+# =====================================================
+df_toa = pd.DataFrame()
+toa_loaded = False
+toa_anomes = None
+
+if "uploaded_toa_bytes" in st.session_state:
+    try:
+        with st.spinner("Carregando Indicadores TOA..."):
+            toa_obj = io.BytesIO(st.session_state["uploaded_toa_bytes"])
+            df_toa = load_toa_indicadores(toa_obj)
+            toa_loaded = not df_toa.empty
+            if toa_loaded and "ANOMES" in df_toa.columns:
+                toa_anomes = int(df_toa["ANOMES"].max())
+            if not toa_loaded:
+                st.warning("Nenhum analista da equipe encontrado nos Indicadores TOA.")
+    except Exception as e:
+        st.warning(f"Erro ao processar planilha de Indicadores TOA: {e}")
+        with st.expander("Detalhes do erro"):
+            st.code(traceback.format_exc())
+
+
+# =====================================================
 # SIDEBAR - FILTROS
 # =====================================================
 with st.sidebar:
@@ -561,6 +584,7 @@ with st.sidebar:
             "uploaded_bytes", "uploaded_bytes_name",
             "uploaded_etit_bytes", "uploaded_etit_bytes_name",
             "uploaded_res_ind_bytes", "uploaded_res_ind_bytes_name",
+            "uploaded_toa_bytes", "uploaded_toa_bytes_name",
             "uploaded_dpa_bytes", "uploaded_dpa_bytes_name",
         ]:
             st.session_state.pop(key, None)
@@ -1773,28 +1797,6 @@ if dpa_loaded and _tab_dpa_idx is not None:
             "text/csv",
         )
 
-
-# =====================================================
-# PROCESSAR DADOS — Indicadores TOA (opcional)
-# =====================================================
-df_toa = pd.DataFrame()
-toa_loaded = False
-toa_anomes = None
-
-if "uploaded_toa_bytes" in st.session_state:
-    try:
-        with st.spinner("Carregando Indicadores TOA..."):
-            toa_obj = io.BytesIO(st.session_state["uploaded_toa_bytes"])
-            df_toa = load_toa_indicadores(toa_obj)
-            toa_loaded = not df_toa.empty
-            if toa_loaded and "ANOMES" in df_toa.columns:
-                toa_anomes = int(df_toa["ANOMES"].max())
-            if not toa_loaded:
-                st.warning("Nenhum analista da equipe encontrado nos Indicadores TOA.")
-    except Exception as e:
-        st.warning(f"Erro ao processar planilha de Indicadores TOA: {e}")
-        with st.expander("Detalhes do erro"):
-            st.code(traceback.format_exc())
 
 
 # =====================================================
