@@ -182,27 +182,25 @@ st.markdown("""
 
 
 # =====================================================
-# CACHED DATA LOADERS (parse Excel only once per file)
+# CACHED DATA LOADERS — session_state based (avoids pickle serialization issues)
 # =====================================================
-@st.cache_data(show_spinner=False)
-def _cached_load_produtividade(file_bytes):
-    return load_produtividade(io.BytesIO(file_bytes))
+def _load_with_cache(cache_key, loader_fn, file_bytes):
+    """
+    Carrega dados usando cache no session_state.
+    Evita problemas de serialização do @st.cache_data com tipos complexos
+    (Timedelta, tuple, etc.).
+    """
+    hash_key = f"_cache_{cache_key}_hash"
+    data_key = f"_cache_{cache_key}_data"
+    current_hash = hash(file_bytes)
 
-@st.cache_data(show_spinner=False)
-def _cached_load_etit(file_bytes):
-    return load_etit(io.BytesIO(file_bytes))
+    if hash_key in st.session_state and st.session_state[hash_key] == current_hash:
+        return st.session_state[data_key]
 
-@st.cache_data(show_spinner=False)
-def _cached_load_residencial(file_bytes):
-    return load_residencial_indicadores(io.BytesIO(file_bytes))
-
-@st.cache_data(show_spinner=False)
-def _cached_load_dpa(file_bytes):
-    return load_dpa_ocupacao(io.BytesIO(file_bytes))
-
-@st.cache_data(show_spinner=False)
-def _cached_load_toa(file_bytes):
-    return load_toa_indicadores(io.BytesIO(file_bytes))
+    result = loader_fn(io.BytesIO(file_bytes))
+    st.session_state[hash_key] = current_hash
+    st.session_state[data_key] = result
+    return result
 
 
 # =====================================================
@@ -486,7 +484,7 @@ if "uploaded_bytes" not in st.session_state:
 # =====================================================
 try:
     with st.spinner("Carregando e processando dados de produtividade..."):
-        df = _cached_load_produtividade(st.session_state["uploaded_bytes"])
+        df = _load_with_cache("produtividade", load_produtividade, st.session_state["uploaded_bytes"])
     if df.empty:
         st.error("Nenhum analista da equipe encontrado na planilha de produtividade.")
         st.stop()
@@ -506,13 +504,13 @@ etit_loaded = False
 if "uploaded_etit_bytes" in st.session_state:
     try:
         with st.spinner("Carregando dados ETIT POR EVENTO..."):
-            df_etit = _cached_load_etit(st.session_state["uploaded_etit_bytes"])
+            df_etit = _load_with_cache("etit", load_etit, st.session_state["uploaded_etit_bytes"])
             etit_loaded = not df_etit.empty
             if not etit_loaded:
                 st.warning("Nenhum analista da equipe encontrado nos dados ETIT POR EVENTO.")
     except Exception as e:
-        st.warning(f"Erro ao processar planilha ETIT: {e}")
-        with st.expander("Detalhes do erro"):
+        st.error(f"❌ Erro ao processar planilha ETIT: {e}")
+        with st.expander("Detalhes do erro ETIT"):
             st.code(traceback.format_exc())
 
 
@@ -525,13 +523,13 @@ res_ind_loaded = False
 if "uploaded_res_ind_bytes" in st.session_state:
     try:
         with st.spinner("Carregando Indicadores Residencial..."):
-            df_res_ind = _cached_load_residencial(st.session_state["uploaded_res_ind_bytes"])
+            df_res_ind = _load_with_cache("res_ind", load_residencial_indicadores, st.session_state["uploaded_res_ind_bytes"])
             res_ind_loaded = not df_res_ind.empty
             if not res_ind_loaded:
                 st.warning("Nenhum dado dos indicadores selecionados encontrado na planilha.")
     except Exception as e:
-        st.warning(f"Erro ao processar planilha de Indicadores Residencial: {e}")
-        with st.expander("Detalhes do erro"):
+        st.error(f"❌ Erro ao processar planilha de Indicadores Residencial: {e}")
+        with st.expander("Detalhes do erro Residencial"):
             st.code(traceback.format_exc())
 
 
@@ -545,13 +543,13 @@ dpa_loaded = False
 if "uploaded_dpa_bytes" in st.session_state:
     try:
         with st.spinner("Carregando Ocupação DPA..."):
-            df_dpa, dpa_mes_info = _cached_load_dpa(st.session_state["uploaded_dpa_bytes"])
+            df_dpa, dpa_mes_info = _load_with_cache("dpa", load_dpa_ocupacao, st.session_state["uploaded_dpa_bytes"])
             dpa_loaded = not df_dpa.empty
             if not dpa_loaded:
                 st.warning("Nenhum analista da equipe encontrado na planilha de Ocupação DPA.")
     except Exception as e:
-        st.warning(f"Erro ao processar planilha de Ocupação DPA: {e}")
-        with st.expander("Detalhes do erro"):
+        st.error(f"❌ Erro ao processar planilha de Ocupação DPA: {e}")
+        with st.expander("Detalhes do erro DPA"):
             st.code(traceback.format_exc())
 
 
@@ -565,15 +563,15 @@ toa_anomes = None
 if "uploaded_toa_bytes" in st.session_state:
     try:
         with st.spinner("Carregando Indicadores TOA..."):
-            df_toa = _cached_load_toa(st.session_state["uploaded_toa_bytes"])
+            df_toa = _load_with_cache("toa", load_toa_indicadores, st.session_state["uploaded_toa_bytes"])
             toa_loaded = not df_toa.empty
             if toa_loaded and "ANOMES" in df_toa.columns:
                 toa_anomes = int(df_toa["ANOMES"].max())
             if not toa_loaded:
                 st.warning("Nenhum analista da equipe encontrado nos Indicadores TOA.")
     except Exception as e:
-        st.warning(f"Erro ao processar planilha de Indicadores TOA: {e}")
-        with st.expander("Detalhes do erro"):
+        st.error(f"❌ Erro ao processar planilha de Indicadores TOA: {e}")
+        with st.expander("Detalhes do erro TOA"):
             st.code(traceback.format_exc())
 
 
@@ -607,6 +605,10 @@ with st.sidebar:
             "uploaded_dpa_bytes", "uploaded_dpa_bytes_name",
         ]:
             st.session_state.pop(key, None)
+        # Limpa cache de dados processados
+        for ck in ["produtividade", "etit", "res_ind", "dpa", "toa"]:
+            st.session_state.pop(f"_cache_{ck}_hash", None)
+            st.session_state.pop(f"_cache_{ck}_data", None)
         st.rerun()
 
     st.markdown("---")
