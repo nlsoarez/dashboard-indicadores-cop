@@ -1233,11 +1233,17 @@ if etit_loaded and _tab_etit_idx is not None:
 # ---- TAB: INDICADORES RESIDENCIAL ----
 if res_ind_loaded and _tab_res_idx is not None:
     with tabs[_tab_res_idx]:
-        st.markdown("#### 🏠 Indicadores Residencial — ETIT Fibra HFC · ETIT GPON · Reprog. GPON · Assertividade")
-        if df_res_filtrado.empty:
-            st.warning("Nenhum dado encontrado com os filtros atuais.")
+        # ---- Filtrar somente regional Leste (equipe do usuário) ----
+        _res_data = df_res_filtrado.copy()
+        if RES_REGIONAL in _res_data.columns:
+            _res_data = _res_data[_res_data[RES_REGIONAL].str.contains("Leste", case=False, na=False)]
+        st.markdown("#### 🏠 Indicadores Residencial — Regional Leste")
+        st.caption("🗺️ Dados filtrados para a regional **Leste** (equipe monitorada).")
+
+        if _res_data.empty:
+            st.warning("Nenhum dado encontrado para a regional Leste com os filtros atuais.")
         else:
-            kpis_df = res_kpis_por_indicador(df_res_filtrado)
+            kpis_df = res_kpis_por_indicador(_res_data)
             st.markdown("##### 📊 Resumo por Indicador")
             n_cols = len(kpis_df)
             ind_cols = st.columns(n_cols) if n_cols > 0 else []
@@ -1271,12 +1277,12 @@ if res_ind_loaded and _tab_res_idx is not None:
             ind_to_show = (
                 [res_ind_selecionado] if res_ind_selecionado != "Todos" else RES_INDICADORES_FILTRO
             )
-            ind_to_show = [i for i in ind_to_show if i in df_res_filtrado[RES_COL_INDICADOR_NOME].unique()]
+            ind_to_show = [i for i in ind_to_show if i in _res_data[RES_COL_INDICADOR_NOME].unique()]
 
             for ind in ind_to_show:
                 label = RES_IND_LABELS.get(ind, ind)
                 color = RES_IND_COLORS.get(ind, "#5DADE2")
-                sub = df_res_filtrado[df_res_filtrado[RES_COL_INDICADOR_NOME] == ind]
+                sub = _res_data[_res_data[RES_COL_INDICADOR_NOME] == ind]
                 if sub.empty:
                     continue
                 vol_total = int(sub[RES_COL_VOLUME].sum())
@@ -1300,26 +1306,14 @@ if res_ind_loaded and _tab_res_idx is not None:
                         if RES_TMR in sub.columns:
                             st.markdown(kpi_card("TMR Médio", f"{sub[RES_TMR].mean():.4f}", COR_ALERTA), unsafe_allow_html=True)
 
-                    cr, cn = st.columns(2)
-                    with cr:
-                        st.markdown("**Por Regional**")
-                        reg_df = res_por_regional(sub)
-                        if not reg_df.empty:
-                            st.dataframe(
-                                reg_df.style
-                                    .format({"Aderencia_Pct": "{:.1f}"}, na_rep="—")
-                                    .background_gradient(cmap="Blues", subset=["Volume"])
-                                    .background_gradient(cmap="RdYlGn", subset=["Aderencia_Pct"], vmin=50, vmax=100),
-                                use_container_width=True, hide_index=True,
-                            )
-                            st.bar_chart(reg_df[["Regional", "Volume"]].set_index("Regional"),
-                                         color=color, height=200)
+                    cn, cs = st.columns(2)
                     with cn:
                         st.markdown("**Por Natureza**")
                         nat_df = res_por_natureza(sub)
                         if not nat_df.empty:
                             st.dataframe(
-                                nat_df.style.format({"Aderencia_Pct": "{:.1f}"}, na_rep="—"),
+                                nat_df.style.format({"Aderencia_Pct": "{:.1f}"}, na_rep="—")
+                                    .background_gradient(cmap="RdYlGn", subset=["Aderencia_Pct"], vmin=50, vmax=100),
                                 use_container_width=True, hide_index=True,
                             )
                         st.markdown("**Por Impacto**")
@@ -1327,15 +1321,15 @@ if res_ind_loaded and _tab_res_idx is not None:
                         if not imp_df.empty:
                             st.dataframe(imp_df.style.format({"Aderencia_Pct": "{:.1f}"}, na_rep="—"),
                                          use_container_width=True, hide_index=True)
-
-                    st.markdown("**Top 15 Soluções**")
-                    sol_df = res_por_solucao(sub, top_n=15)
-                    if not sol_df.empty:
-                        st.dataframe(
-                            sol_df.style.format({"Aderencia_Pct": "{:.1f}"}, na_rep="—")
-                                .background_gradient(cmap="YlOrRd", subset=["Volume"]),
-                            use_container_width=True, hide_index=True, height=350,
-                        )
+                    with cs:
+                        st.markdown("**Por Solução (Top 15)**")
+                        sol_df = res_por_solucao(sub, top_n=15)
+                        if not sol_df.empty:
+                            st.dataframe(
+                                sol_df.style.format({"Aderencia_Pct": "{:.1f}"}, na_rep="—")
+                                    .background_gradient(cmap="YlOrRd", subset=["Volume"]),
+                                use_container_width=True, hide_index=True, height=350,
+                            )
 
                     st.markdown("**Evolução Diária**")
                     evo_df = res_evolucao_diaria(sub)
@@ -1349,34 +1343,60 @@ if res_ind_loaded and _tab_res_idx is not None:
                             st.line_chart(evo_df[["Data", "Aderencia_Pct"]].set_index("Data"), color=COR_SUCESSO, height=200)
 
             st.markdown("---")
-            st.markdown("##### 📋 Tabela Consolidada por Regional e Indicador")
+
+            # =============================================
+            # INSIGHTS — INDICADORES RESIDENCIAL (LESTE)
+            # =============================================
+            st.markdown("### 💡 Insights — Indicadores Residencial (Leste)")
+            _res_insights = []
+
             if not kpis_df.empty:
-                pivot_list = []
+                # Melhor e pior indicador
+                best_ind = kpis_df.loc[kpis_df["Aderencia_Pct"].idxmax()]
+                worst_ind = kpis_df.loc[kpis_df["Aderencia_Pct"].idxmin()]
+                _res_insights.append(
+                    f"🟢 Melhor indicador: **{RES_IND_LABELS.get(best_ind['Indicador'], best_ind['Indicador'])}** "
+                    f"com **{best_ind['Aderencia_Pct']:.1f}%** de aderência ({int(best_ind['Volume'])} registros)."
+                )
+                if best_ind["Indicador"] != worst_ind["Indicador"]:
+                    _res_insights.append(
+                        f"🔴 Pior indicador: **{RES_IND_LABELS.get(worst_ind['Indicador'], worst_ind['Indicador'])}** "
+                        f"com **{worst_ind['Aderencia_Pct']:.1f}%** de aderência ({int(worst_ind['Volume'])} registros)."
+                    )
+                # Média geral
+                _avg_ader = kpis_df["Aderencia_Pct"].mean()
+                _res_insights.append(f"📊 Aderência média geral (Leste): **{_avg_ader:.1f}%**.")
+
+                # Indicadores abaixo de 80%
+                _low = kpis_df[kpis_df["Aderencia_Pct"] < 80]
+                if len(_low) > 0:
+                    _low_names = [RES_IND_LABELS.get(r["Indicador"], r["Indicador"]) for _, r in _low.iterrows()]
+                    _res_insights.append(f"⚠️ {len(_low)} indicador(es) abaixo de 80%: {', '.join(_low_names)}.")
+
+                # Volume total
+                _vol_total = int(kpis_df["Volume"].sum())
+                _ader_total = int(kpis_df["Aderentes"].sum())
+                _res_insights.append(f"📦 Volume total na Leste: **{_vol_total:,}** registros, **{_ader_total:,}** aderentes.")
+
+                # Por natureza — top causa de não aderência
                 for ind in RES_INDICADORES_FILTRO:
-                    sub = df_res_filtrado[df_res_filtrado[RES_COL_INDICADOR_NOME] == ind]
-                    if sub.empty:
+                    sub_i = _res_data[_res_data[RES_COL_INDICADOR_NOME] == ind]
+                    if sub_i.empty:
                         continue
-                    reg_df = res_por_regional(sub)
-                    if reg_df.empty:
-                        continue
-                    reg_df["Indicador"] = RES_IND_LABELS.get(ind, ind)
-                    pivot_list.append(reg_df)
-                if pivot_list:
-                    all_reg = pd.concat(pivot_list, ignore_index=True)
-                    try:
-                        pivot_tbl = all_reg.pivot_table(
-                            index="Regional", columns="Indicador",
-                            values="Aderencia_Pct", aggfunc="first",
-                        ).reset_index()
-                        st.dataframe(
-                            pivot_tbl.style.format(
-                                {c: "{:.1f}" for c in pivot_tbl.columns if c != "Regional"}, na_rep="—"
-                            ).background_gradient(cmap="RdYlGn", vmin=50, vmax=100,
-                                subset=[c for c in pivot_tbl.columns if c != "Regional"]),
-                            use_container_width=True, hide_index=True,
-                        )
-                    except Exception:
-                        st.dataframe(all_reg, use_container_width=True, hide_index=True)
+                    nat_i = res_por_natureza(sub_i)
+                    if not nat_i.empty:
+                        worst_nat = nat_i.loc[nat_i["Aderencia_Pct"].idxmin()]
+                        if worst_nat["Aderencia_Pct"] < 70:
+                            _res_insights.append(
+                                f"🔍 Em **{RES_IND_LABELS.get(ind, ind)}**, a natureza "
+                                f"**{worst_nat['Natureza']}** tem apenas **{worst_nat['Aderencia_Pct']:.1f}%** de aderência."
+                            )
+
+            if _res_insights:
+                for ins in _res_insights:
+                    st.markdown(ins)
+            else:
+                st.caption("Sem dados suficientes para gerar insights.")
 
             st.markdown("---")
             res_show_cols = [
@@ -1385,296 +1405,299 @@ if res_ind_loaded and _tab_res_idx is not None:
                 RES_COL_IMPACTO, RES_COL_SOLUCAO, RES_TMA, RES_TMR,
                 RES_COL_DT_INICIO, RES_ANOMES,
             ]
-            res_show_cols = [c for c in res_show_cols if c in df_res_filtrado.columns]
+            res_show_cols = [c for c in res_show_cols if c in _res_data.columns]
             st.dataframe(
-                df_res_filtrado[res_show_cols].sort_values(
-                    [RES_COL_DT_INICIO] if RES_COL_DT_INICIO in df_res_filtrado.columns else [RES_COL_INDICADOR_NOME],
+                _res_data[res_show_cols].sort_values(
+                    [RES_COL_DT_INICIO] if RES_COL_DT_INICIO in _res_data.columns else [RES_COL_INDICADOR_NOME],
                     ascending=False,
                 ),
                 use_container_width=True, height=400,
             )
-            csv_res = df_res_filtrado[res_show_cols].to_csv(index=False).encode("utf-8")
-            st.download_button("📥 Baixar Indicadores Residencial (CSV)", csv_res, "indicadores_residencial.csv", "text/csv")
+            csv_res = _res_data[res_show_cols].to_csv(index=False).encode("utf-8")
+            st.download_button("📥 Baixar Indicadores Residencial Leste (CSV)", csv_res, "indicadores_residencial_leste.csv", "text/csv")
 
 
 
 # ---- TAB: INDICADORES TOA ----
 if toa_loaded and _tab_toa_idx is not None:
     with tabs[_tab_toa_idx]:
+        # ---- Filtrar somente EMPRESARIAL ----
+        df_toa_emp = df_toa[df_toa["Setor"] == "EMPRESARIAL"].copy()
         anomes_str = str(toa_anomes) if toa_anomes else "?"
         st.markdown(
-            f"#### 📋 Indicadores TOA — Tarefas Canceladas · Tempo de Validação do Formulário · "
+            f"#### 📋 Indicadores TOA — Empresarial · "
             f"Período: **{anomes_str}** (mês mais recente)"
         )
         st.caption(
-            "ℹ️ Dados filtrados automaticamente para o mês mais recente disponível na planilha. "
+            "🏢 Dados filtrados para o setor **Empresarial**. "
             "Tarefas Canceladas: menor = melhor. Tempo de Validação: maior aderência% = melhor."
         )
 
-        # ---- KPIs gerais ----
-        resumo_toa = toa_resumo_por_indicador(df_toa)
-        if not resumo_toa.empty:
-            tk_cols = st.columns(len(resumo_toa) * 2)
-            ci = 0
-            for _, trow in resumo_toa.iterrows():
-                ind_nome = trow["Indicador"]
-                cor = TOA_IND_COLORS.get(ind_nome, COR_INFO)
-                label = TOA_IND_LABELS.get(ind_nome, ind_nome)
-                with tk_cols[ci]:
-                    st.markdown(kpi_card(f"Total — {label[:20]}", f"{trow['Total']:,}", cor), unsafe_allow_html=True)
-                ci += 1
-                with tk_cols[ci]:
-                    if ind_nome == TOA_IND_CANCELADAS:
-                        # Para canceladas: mostrar total (menor = melhor)
-                        st.markdown(kpi_card("Canceladas (⚠️ menor melhor)", f"{trow['Total']:,}", COR_PERIGO), unsafe_allow_html=True)
-                    else:
-                        pct = trow["Aderencia_Pct"]
-                        pct_c = COR_SUCESSO if pct >= 90 else (COR_ALERTA if pct >= 70 else COR_PERIGO)
-                        st.markdown(kpi_card(f"Aderência — {label[:15]}", f"{pct:.1f}", pct_c, suffix="%"), unsafe_allow_html=True)
-                ci += 1
+        if df_toa_emp.empty:
+            st.warning("Nenhum dado TOA encontrado para o setor Empresarial.")
+        else:
+            # ---- KPIs gerais ----
+            resumo_toa = toa_resumo_por_indicador(df_toa_emp)
+            if not resumo_toa.empty:
+                tk_cols = st.columns(len(resumo_toa) * 2)
+                ci = 0
+                for _, trow in resumo_toa.iterrows():
+                    ind_nome = trow["Indicador"]
+                    cor = TOA_IND_COLORS.get(ind_nome, COR_INFO)
+                    label = TOA_IND_LABELS.get(ind_nome, ind_nome)
+                    with tk_cols[ci]:
+                        st.markdown(kpi_card(f"Total — {label[:20]}", f"{trow['Total']:,}", cor), unsafe_allow_html=True)
+                    ci += 1
+                    with tk_cols[ci]:
+                        if ind_nome == TOA_IND_CANCELADAS:
+                            st.markdown(kpi_card("Canceladas (⚠️ menor melhor)", f"{trow['Total']:,}", COR_PERIGO), unsafe_allow_html=True)
+                        else:
+                            pct = trow["Aderencia_Pct"]
+                            pct_c = COR_SUCESSO if pct >= 90 else (COR_ALERTA if pct >= 70 else COR_PERIGO)
+                            st.markdown(kpi_card(f"Aderência — {label[:15]}", f"{pct:.1f}", pct_c, suffix="%"), unsafe_allow_html=True)
+                    ci += 1
 
-        st.markdown("---")
+            st.markdown("---")
 
-        # =============================================
-        # SEÇÃO 1: TAREFAS CANCELADAS
-        # =============================================
-        st.markdown("### ❌ Tarefas Canceladas")
-        st.caption("Cada linha representa uma tarefa cancelada por um analista da equipe no período.")
+            # =============================================
+            # SEÇÃO 1: TAREFAS CANCELADAS
+            # =============================================
+            st.markdown("### ❌ Tarefas Canceladas")
+            st.caption("Cada linha representa uma tarefa cancelada por um analista empresarial no período.")
 
-        col_canc1, col_canc2 = st.columns([1, 1])
+            col_canc1, col_canc2 = st.columns([1, 1])
 
-        with col_canc1:
-            st.markdown("##### 🏆 Ranking por Analista")
-            df_canc_anal = toa_canceladas_por_analista(df_toa)
-            if not df_canc_anal.empty:
-                df_canc_anal["Analista"] = df_canc_anal["Nome"].apply(primeiro_nome)
-                df_canc_anal["TMR Médio (h)"] = df_canc_anal["TMR_Medio_h"]
-                tbl_canc = df_canc_anal[["Analista", "Setor", "Canceladas", "TMR Médio (h)"]].copy()
-                tbl_canc = tbl_canc.reset_index(drop=True)
-                tbl_canc.index += 1; tbl_canc.index.name = "#"
-                st.dataframe(
-                    tbl_canc.style
-                        .format({"TMR Médio (h)": "{:.2f}"}, na_rep="—")
-                        .background_gradient(cmap="Reds", subset=["Canceladas"]),
-                    use_container_width=True,
-                )
-                # Mini bar chart
-                chart_canc = df_canc_anal[["Analista", "Canceladas"]].set_index("Analista").sort_values("Canceladas")
-                st.bar_chart(chart_canc, color="#E74C3C", height=300)
-
-        with col_canc2:
-            # Aging
-            st.markdown("##### ⏱️ Distribuição por Faixa de Tempo (AGING)")
-            df_aging = toa_canceladas_por_aging(df_toa)
-            if not df_aging.empty:
-                st.dataframe(
-                    df_aging.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
-                    use_container_width=True, hide_index=True,
-                )
-                chart_aging = df_aging.set_index("Aging")
-                st.bar_chart(chart_aging, color="#E74C3C", height=250)
-
-            # Tipo de Atividade
-            st.markdown("##### 🔧 Por Tipo de Atividade")
-            df_canc_tipo = toa_canceladas_por_tipo(df_toa)
-            if not df_canc_tipo.empty:
-                st.dataframe(
-                    df_canc_tipo.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
-                    use_container_width=True, hide_index=True,
-                )
-
-        # Breakdown por Rede e Regional (linha abaixo)
-        col_cr, col_creg = st.columns(2)
-        with col_cr:
-            st.markdown("##### 📡 Por Rede")
-            df_canc_rede = toa_canceladas_por_rede(df_toa)
-            if not df_canc_rede.empty:
-                st.dataframe(
-                    df_canc_rede.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
-                    use_container_width=True, hide_index=True,
-                )
-        with col_creg:
-            st.markdown("##### 🗺️ Por Regional")
-            df_canc_reg = toa_canceladas_por_regional(df_toa)
-            if not df_canc_reg.empty:
-                st.dataframe(
-                    df_canc_reg.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
-                    use_container_width=True, hide_index=True,
-                )
-
-        # Evolução diária canceladas
-        st.markdown("##### 📅 Evolução Diária")
-        df_canc_evo = toa_canceladas_evolucao(df_toa)
-        if not df_canc_evo.empty:
-            st.area_chart(df_canc_evo[["Data", "Canceladas"]].set_index("Data"), color="#E74C3C", height=220)
-
-        # Detalhe de canceladas por setor
-        st.markdown("##### 🏢🏠 Canceladas por Setor")
-        c_emp_c, c_res_c = st.columns(2)
-        for col_s, setor_s in [(c_emp_c, "EMPRESARIAL"), (c_res_c, "RESIDENCIAL")]:
-            icon_s = "🏢" if setor_s == "EMPRESARIAL" else "🏠"
-            with col_s:
-                st.markdown(f"**{icon_s} {setor_s}**")
-                sub_s = df_canc_anal[df_canc_anal["Setor"] == setor_s][["Analista", "Canceladas", "TMR Médio (h)"]].copy()
-                if sub_s.empty:
-                    st.caption("Nenhum registro.")
-                else:
-                    sub_s = sub_s.reset_index(drop=True); sub_s.index += 1; sub_s.index.name = "#"
+            with col_canc1:
+                st.markdown("##### 🏆 Ranking por Analista")
+                df_canc_anal = toa_canceladas_por_analista(df_toa_emp)
+                if not df_canc_anal.empty:
+                    df_canc_anal["Analista"] = df_canc_anal["Nome"].apply(primeiro_nome)
+                    df_canc_anal["TMR Médio (h)"] = df_canc_anal["TMR_Medio_h"]
+                    tbl_canc = df_canc_anal[["Analista", "Canceladas", "TMR Médio (h)"]].copy()
+                    tbl_canc = tbl_canc.reset_index(drop=True)
+                    tbl_canc.index += 1; tbl_canc.index.name = "#"
                     st.dataframe(
-                        sub_s.style.format({"TMR Médio (h)": "{:.2f}"}).background_gradient(cmap="Reds", subset=["Canceladas"]),
+                        tbl_canc.style
+                            .format({"TMR Médio (h)": "{:.2f}"}, na_rep="—")
+                            .background_gradient(cmap="Reds", subset=["Canceladas"]),
                         use_container_width=True,
                     )
+                    chart_canc = df_canc_anal[["Analista", "Canceladas"]].set_index("Analista").sort_values("Canceladas")
+                    st.bar_chart(chart_canc, color="#E74C3C", height=300)
 
-        st.markdown("---")
+            with col_canc2:
+                st.markdown("##### ⏱️ Distribuição por Faixa de Tempo (AGING)")
+                df_aging = toa_canceladas_por_aging(df_toa_emp)
+                if not df_aging.empty:
+                    st.dataframe(
+                        df_aging.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
+                        use_container_width=True, hide_index=True,
+                    )
+                    chart_aging = df_aging.set_index("Aging")
+                    st.bar_chart(chart_aging, color="#E74C3C", height=250)
 
-        # =============================================
-        # SEÇÃO 2: TEMPO DE VALIDAÇÃO DO FORMULÁRIO
-        # =============================================
-        st.markdown("### ✅ Tempo de Validação do Formulário")
-        st.caption("Aderência ao tempo máximo permitido para validar o formulário TOA. Maior aderência% = melhor.")
+                st.markdown("##### 🔧 Por Tipo de Atividade")
+                df_canc_tipo = toa_canceladas_por_tipo(df_toa_emp)
+                if not df_canc_tipo.empty:
+                    st.dataframe(
+                        df_canc_tipo.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
+                        use_container_width=True, hide_index=True,
+                    )
 
-        col_val1, col_val2 = st.columns([1, 1])
+            col_cr, col_creg = st.columns(2)
+            with col_cr:
+                st.markdown("##### 📡 Por Rede")
+                df_canc_rede = toa_canceladas_por_rede(df_toa_emp)
+                if not df_canc_rede.empty:
+                    st.dataframe(
+                        df_canc_rede.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
+                        use_container_width=True, hide_index=True,
+                    )
+            with col_creg:
+                st.markdown("##### 🗺️ Por Regional")
+                df_canc_reg = toa_canceladas_por_regional(df_toa_emp)
+                if not df_canc_reg.empty:
+                    st.dataframe(
+                        df_canc_reg.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
+                        use_container_width=True, hide_index=True,
+                    )
 
-        with col_val1:
-            st.markdown("##### 🏆 Ranking por Analista")
-            df_val_anal = toa_validacao_por_analista(df_toa)
-            if not df_val_anal.empty:
-                df_val_anal["Analista"] = df_val_anal["Nome"].apply(primeiro_nome)
-                tbl_val = df_val_anal[["Analista", "Setor", "Total", "Aderentes", "Aderencia_Pct", "TMR_Medio_min"]].copy()
-                tbl_val.columns = ["Analista", "Setor", "Total", "Aderentes", "Aderência %", "TMR Médio (min)"]
-                tbl_val = tbl_val.reset_index(drop=True)
-                tbl_val.index += 1; tbl_val.index.name = "#"
-                styled_val = tbl_val.style.format(
-                    {"Aderência %": "{:.1f}", "TMR Médio (min)": "{:.1f}"}, na_rep="—"
-                )
-                styled_val = styled_val.background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100)
-                styled_val = styled_val.background_gradient(cmap="RdYlGn_r", subset=["TMR Médio (min)"], vmin=5, vmax=60)
-                st.dataframe(styled_val, use_container_width=True)
+            st.markdown("##### 📅 Evolução Diária — Canceladas")
+            df_canc_evo = toa_canceladas_evolucao(df_toa_emp)
+            if not df_canc_evo.empty:
+                st.area_chart(df_canc_evo[["Data", "Canceladas"]].set_index("Data"), color="#E74C3C", height=220)
 
-                # Destaques
-                best_v = tbl_val.iloc[0]
-                worst_v = tbl_val.iloc[-1]
-                cv1, cv2 = st.columns(2)
-                with cv1:
-                    st.markdown(f"""<div class="perf-card perf-best">
-                        <div class="p-title">🏆 Melhor Aderência</div>
-                        <div class="p-name" style="color:#2ECC71;">{best_v['Analista']}</div>
-                        <div class="p-detail">{best_v['Aderência %']:.1f}% · TMR: {best_v['TMR Médio (min)']:.1f} min</div>
-                    </div>""", unsafe_allow_html=True)
-                with cv2:
-                    st.markdown(f"""<div class="perf-card perf-worst">
-                        <div class="p-title">⚠️ Menor Aderência</div>
-                        <div class="p-name" style="color:#E74C3C;">{worst_v['Analista']}</div>
-                        <div class="p-detail">{worst_v['Aderência %']:.1f}% · TMR: {worst_v['TMR Médio (min)']:.1f} min</div>
-                    </div>""", unsafe_allow_html=True)
+            st.markdown("---")
 
-        with col_val2:
-            # Bar chart aderência
-            st.markdown("##### 📊 Aderência por Analista")
-            chart_val = df_val_anal[["Analista", "Aderencia_Pct"]].set_index("Analista").sort_values("Aderencia_Pct")
-            chart_val.columns = ["Aderência %"]
-            st.bar_chart(chart_val, horizontal=True, color="#16A085", height=400)
+            # =============================================
+            # SEÇÃO 2: TEMPO DE VALIDAÇÃO DO FORMULÁRIO
+            # =============================================
+            st.markdown("### ✅ Tempo de Validação do Formulário")
+            st.caption("Aderência ao tempo máximo permitido para validar o formulário TOA. Maior aderência% = melhor.")
 
-        # Breakdowns por tipo, rede e regional
-        col_v1, col_v2, col_v3 = st.columns(3)
-        with col_v1:
-            st.markdown("##### 🔧 Por Tipo de Atividade")
-            df_val_tipo = toa_validacao_por_tipo(df_toa)
-            if not df_val_tipo.empty:
-                df_val_tipo_show = df_val_tipo[["Tipo Atividade", "Total", "Aderentes", "Aderencia_Pct", "TMR_Medio_min"]].copy()
-                df_val_tipo_show.columns = ["Tipo Atividade", "Total", "Aderentes", "Aderência %", "TMR (min)"]
-                st.dataframe(
-                    df_val_tipo_show.style
-                        .format({"Aderência %": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
-                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
-                    use_container_width=True, hide_index=True,
-                )
-        with col_v2:
-            st.markdown("##### 📡 Por Rede")
-            df_val_rede = toa_validacao_por_rede(df_toa)
-            if not df_val_rede.empty:
-                df_val_rede_show = df_val_rede[["Rede", "Total", "Aderentes", "Aderencia_Pct", "TMR_Medio_min"]].copy()
-                df_val_rede_show.columns = ["Rede", "Total", "Aderentes", "Aderência %", "TMR (min)"]
-                st.dataframe(
-                    df_val_rede_show.style
-                        .format({"Aderência %": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
-                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
-                    use_container_width=True, hide_index=True,
-                )
-        with col_v3:
-            st.markdown("##### 🗺️ Por Regional")
-            df_val_reg = toa_validacao_por_regional(df_toa)
-            if not df_val_reg.empty:
-                df_val_reg_show = df_val_reg[["Regional", "Total", "Aderentes", "Aderencia_Pct", "TMR_Medio_min"]].copy()
-                df_val_reg_show.columns = ["Regional", "Total", "Aderentes", "Aderência %", "TMR (min)"]
-                st.dataframe(
-                    df_val_reg_show.style
-                        .format({"Aderência %": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
-                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
-                    use_container_width=True, hide_index=True,
-                )
+            col_val1, col_val2 = st.columns([1, 1])
 
-        # Validação por setor
-        st.markdown("##### 🏢🏠 Aderência por Setor")
-        c_emp_v, c_res_v = st.columns(2)
-        for col_sv, setor_sv in [(c_emp_v, "EMPRESARIAL"), (c_res_v, "RESIDENCIAL")]:
-            icon_sv = "🏢" if setor_sv == "EMPRESARIAL" else "🏠"
-            with col_sv:
-                st.markdown(f"**{icon_sv} {setor_sv}**")
-                sub_sv = df_val_anal[df_val_anal["Setor"] == setor_sv].copy()
-                if sub_sv.empty:
-                    st.caption("Nenhum registro.")
-                    continue
-                media_ader_sv = sub_sv["Aderencia_Pct"].mean()
-                media_tmr_sv  = sub_sv["TMR_Medio_min"].mean()
-                sv1, sv2 = st.columns(2)
-                with sv1:
-                    pct_c_sv = COR_SUCESSO if media_ader_sv >= 90 else (COR_ALERTA if media_ader_sv >= 70 else COR_PERIGO)
-                    st.markdown(kpi_card("Aderência Média", f"{media_ader_sv:.1f}", pct_c_sv, suffix="%"), unsafe_allow_html=True)
-                with sv2:
-                    st.markdown(kpi_card("TMR Médio (min)", f"{media_tmr_sv:.1f}", COR_INFO), unsafe_allow_html=True)
-                sub_sv_show = sub_sv[["Analista", "Total", "Aderencia_Pct", "TMR_Medio_min"]].copy()
-                sub_sv_show.columns = ["Analista", "Total", "Aderência %", "TMR Médio (min)"]
-                sub_sv_show = sub_sv_show.reset_index(drop=True)
-                sub_sv_show.index += 1; sub_sv_show.index.name = "#"
-                st.dataframe(
-                    sub_sv_show.style
-                        .format({"Aderência %": "{:.1f}", "TMR Médio (min)": "{:.1f}"})
-                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
-                    use_container_width=True,
-                )
+            with col_val1:
+                st.markdown("##### 🏆 Ranking por Analista")
+                df_val_anal = toa_validacao_por_analista(df_toa_emp)
+                if not df_val_anal.empty:
+                    df_val_anal["Analista"] = df_val_anal["Nome"].apply(primeiro_nome)
+                    tbl_val = df_val_anal[["Analista", "Total", "Aderentes", "Aderencia_Pct", "TMR_Medio_min"]].copy()
+                    tbl_val.columns = ["Analista", "Total", "Aderentes", "Aderência %", "TMR Médio (min)"]
+                    tbl_val = tbl_val.reset_index(drop=True)
+                    tbl_val.index += 1; tbl_val.index.name = "#"
+                    styled_val = tbl_val.style.format(
+                        {"Aderência %": "{:.1f}", "TMR Médio (min)": "{:.1f}"}, na_rep="—"
+                    )
+                    styled_val = styled_val.background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100)
+                    styled_val = styled_val.background_gradient(cmap="RdYlGn_r", subset=["TMR Médio (min)"], vmin=5, vmax=60)
+                    st.dataframe(styled_val, use_container_width=True)
 
-        # Evolução diária validação
-        st.markdown("##### 📅 Evolução Diária — Validação do Formulário")
-        df_val_evo = toa_validacao_evolucao(df_toa)
-        if not df_val_evo.empty:
-            c_evo1, c_evo2 = st.columns(2)
-            with c_evo1:
-                st.caption("Aderência diária (%)")
-                st.line_chart(df_val_evo[["Data", "Aderencia_Pct"]].set_index("Data"), color="#16A085", height=220)
-            with c_evo2:
-                st.caption("TMR médio diário (min)")
-                st.line_chart(df_val_evo[["Data", "TMR_Medio_min"]].set_index("Data"), color=COR_ALERTA, height=220)
+                    if len(tbl_val) >= 2:
+                        best_v = tbl_val.iloc[0]
+                        worst_v = tbl_val.iloc[-1]
+                        cv1, cv2 = st.columns(2)
+                        with cv1:
+                            st.markdown(f"""<div class="perf-card perf-best">
+                                <div class="p-title">🏆 Melhor Aderência</div>
+                                <div class="p-name" style="color:#2ECC71;">{best_v['Analista']}</div>
+                                <div class="p-detail">{best_v['Aderência %']:.1f}% · TMR: {best_v['TMR Médio (min)']:.1f} min</div>
+                            </div>""", unsafe_allow_html=True)
+                        with cv2:
+                            st.markdown(f"""<div class="perf-card perf-worst">
+                                <div class="p-title">⚠️ Menor Aderência</div>
+                                <div class="p-name" style="color:#E74C3C;">{worst_v['Analista']}</div>
+                                <div class="p-detail">{worst_v['Aderência %']:.1f}% · TMR: {worst_v['TMR Médio (min)']:.1f} min</div>
+                            </div>""", unsafe_allow_html=True)
 
-        st.markdown("---")
+            with col_val2:
+                st.markdown("##### 📊 Aderência por Analista")
+                if not df_val_anal.empty:
+                    chart_val = df_val_anal[["Analista", "Aderencia_Pct"]].set_index("Analista").sort_values("Aderencia_Pct")
+                    chart_val.columns = ["Aderência %"]
+                    st.bar_chart(chart_val, horizontal=True, color="#16A085", height=400)
 
-        # ---- Export combinado ----
-        st.markdown("##### 📥 Exportar dados TOA")
-        toa_export_cols = [
-            "INDICADOR_NOME", "ID_ATIVIDADE", "LOGIN", "Nome", "Setor",
-            "IN_REGIONAL", "TIPO_ATIVIDADE", "REDE", "MERCADO", "NATUREZA",
-            "INDICADOR", "INDICADOR_STATUS", "ADERENTE",
-            "TMR_min", "AGING", "DATA", "DT_CANCELAMENTO",
-            "DT_INICIO_FORM", "DT_FIM_FORM", "ANOMES",
-        ]
-        toa_export_cols = [c for c in toa_export_cols if c in df_toa.columns]
-        csv_toa = df_toa[toa_export_cols].to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "📥 Baixar Indicadores TOA (CSV)",
-            csv_toa,
-            f"indicadores_toa_{anomes_str}.csv",
-            "text/csv",
-        )
+            col_v1, col_v2, col_v3 = st.columns(3)
+            with col_v1:
+                st.markdown("##### 🔧 Por Tipo de Atividade")
+                df_val_tipo = toa_validacao_por_tipo(df_toa_emp)
+                if not df_val_tipo.empty:
+                    df_val_tipo_show = df_val_tipo[["Tipo Atividade", "Total", "Aderentes", "Aderencia_Pct", "TMR_Medio_min"]].copy()
+                    df_val_tipo_show.columns = ["Tipo Atividade", "Total", "Aderentes", "Aderência %", "TMR (min)"]
+                    st.dataframe(
+                        df_val_tipo_show.style
+                            .format({"Aderência %": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
+                            .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
+                        use_container_width=True, hide_index=True,
+                    )
+            with col_v2:
+                st.markdown("##### 📡 Por Rede")
+                df_val_rede = toa_validacao_por_rede(df_toa_emp)
+                if not df_val_rede.empty:
+                    df_val_rede_show = df_val_rede[["Rede", "Total", "Aderentes", "Aderencia_Pct", "TMR_Medio_min"]].copy()
+                    df_val_rede_show.columns = ["Rede", "Total", "Aderentes", "Aderência %", "TMR (min)"]
+                    st.dataframe(
+                        df_val_rede_show.style
+                            .format({"Aderência %": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
+                            .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
+                        use_container_width=True, hide_index=True,
+                    )
+            with col_v3:
+                st.markdown("##### 🗺️ Por Regional")
+                df_val_reg = toa_validacao_por_regional(df_toa_emp)
+                if not df_val_reg.empty:
+                    df_val_reg_show = df_val_reg[["Regional", "Total", "Aderentes", "Aderencia_Pct", "TMR_Medio_min"]].copy()
+                    df_val_reg_show.columns = ["Regional", "Total", "Aderentes", "Aderência %", "TMR (min)"]
+                    st.dataframe(
+                        df_val_reg_show.style
+                            .format({"Aderência %": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
+                            .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
+                        use_container_width=True, hide_index=True,
+                    )
+
+            st.markdown("##### 📅 Evolução Diária — Validação do Formulário")
+            df_val_evo = toa_validacao_evolucao(df_toa_emp)
+            if not df_val_evo.empty:
+                c_evo1, c_evo2 = st.columns(2)
+                with c_evo1:
+                    st.caption("Aderência diária (%)")
+                    st.line_chart(df_val_evo[["Data", "Aderencia_Pct"]].set_index("Data"), color="#16A085", height=220)
+                with c_evo2:
+                    st.caption("TMR médio diário (min)")
+                    st.line_chart(df_val_evo[["Data", "TMR_Medio_min"]].set_index("Data"), color=COR_ALERTA, height=220)
+
+            st.markdown("---")
+
+            # =============================================
+            # INSIGHTS TOA — EMPRESARIAL
+            # =============================================
+            st.markdown("### 💡 Insights — Indicadores TOA Empresarial")
+            _toa_insights = []
+
+            # Insights de canceladas
+            _canc_a = toa_canceladas_por_analista(df_toa_emp)
+            if not _canc_a.empty:
+                _canc_a["Analista"] = _canc_a["Nome"].apply(primeiro_nome)
+                _worst_canc = _canc_a.iloc[0]  # mais canceladas (sorted desc by default)
+                _best_canc = _canc_a.iloc[-1]   # menos canceladas
+                _total_canc = int(_canc_a["Canceladas"].sum())
+                _media_canc = _canc_a["Canceladas"].mean()
+                _toa_insights.append(f"🔴 **{_worst_canc['Analista']}** lidera em cancelamentos com **{int(_worst_canc['Canceladas'])}** tarefas ({_worst_canc['Canceladas']/_total_canc*100:.0f}% do total da equipe).")
+                _toa_insights.append(f"🟢 **{_best_canc['Analista']}** tem o menor volume de cancelamentos: **{int(_best_canc['Canceladas'])}** tarefas.")
+                _above_avg = _canc_a[_canc_a["Canceladas"] > _media_canc]
+                if len(_above_avg) > 0:
+                    _toa_insights.append(f"⚠️ {len(_above_avg)} analista(s) acima da média de {_media_canc:.0f} cancelamentos: {', '.join(_above_avg['Analista'].tolist())}.")
+
+            # Insights de validação
+            _val_a = toa_validacao_por_analista(df_toa_emp)
+            if not _val_a.empty:
+                _val_a["Analista"] = _val_a["Nome"].apply(primeiro_nome)
+                _media_ader = _val_a["Aderencia_Pct"].mean()
+                _best_val = _val_a.iloc[0]
+                _worst_val = _val_a.iloc[-1]
+                _toa_insights.append(f"📊 Aderência média da equipe na validação: **{_media_ader:.1f}%**.")
+                _toa_insights.append(f"🏆 **{_best_val['Analista']}** tem a melhor aderência: **{_best_val['Aderencia_Pct']:.1f}%** (TMR: {_best_val['TMR_Medio_min']:.1f} min).")
+                _toa_insights.append(f"⚠️ **{_worst_val['Analista']}** tem a menor aderência: **{_worst_val['Aderencia_Pct']:.1f}%** (TMR: {_worst_val['TMR_Medio_min']:.1f} min).")
+                _low_ader = _val_a[_val_a["Aderencia_Pct"] < 80]
+                if len(_low_ader) > 0:
+                    _toa_insights.append(f"🔴 {len(_low_ader)} analista(s) com aderência abaixo de 80%: {', '.join(_low_ader['Analista'].tolist())}.")
+
+            # Insights de tipo/rede
+            _canc_t = toa_canceladas_por_tipo(df_toa_emp)
+            if not _canc_t.empty and len(_canc_t) >= 1:
+                _top_tipo = _canc_t.iloc[0]
+                _toa_insights.append(f"🔧 Tipo de atividade com mais cancelamentos: **{_top_tipo['Tipo Atividade']}** ({int(_top_tipo['Canceladas'])} tarefas).")
+
+            _canc_r = toa_canceladas_por_rede(df_toa_emp)
+            if not _canc_r.empty and len(_canc_r) >= 1:
+                _top_rede = _canc_r.iloc[0]
+                _toa_insights.append(f"📡 Rede com mais cancelamentos: **{_top_rede['Rede']}** ({int(_top_rede['Canceladas'])} tarefas).")
+
+            if _toa_insights:
+                for ins in _toa_insights:
+                    st.markdown(ins)
+            else:
+                st.caption("Sem dados suficientes para gerar insights.")
+
+            st.markdown("---")
+
+            # ---- Export ----
+            st.markdown("##### 📥 Exportar dados TOA (Empresarial)")
+            toa_export_cols = [
+                "INDICADOR_NOME", "ID_ATIVIDADE", "LOGIN", "Nome", "Setor",
+                "IN_REGIONAL", "TIPO_ATIVIDADE", "REDE", "MERCADO", "NATUREZA",
+                "INDICADOR", "INDICADOR_STATUS", "ADERENTE",
+                "TMR_min", "AGING", "DATA", "DT_CANCELAMENTO",
+                "DT_INICIO_FORM", "DT_FIM_FORM", "ANOMES",
+            ]
+            toa_export_cols = [c for c in toa_export_cols if c in df_toa_emp.columns]
+            csv_toa = df_toa_emp[toa_export_cols].to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📥 Baixar Indicadores TOA Empresarial (CSV)",
+                csv_toa,
+                f"indicadores_toa_empresarial_{anomes_str}.csv",
+                "text/csv",
+            )
 
 
 # ---- TAB: OCUPAÇÃO DPA ----
@@ -1808,6 +1831,140 @@ if dpa_loaded and _tab_dpa_idx is not None:
                 if comp_df["Diferença"].notna().any():
                     styled_comp = styled_comp.background_gradient(cmap="RdYlGn", subset=["Diferença"], vmin=-20, vmax=20)
                 st.dataframe(styled_comp, use_container_width=True)
+
+        st.markdown("---")
+
+        # ---- DPA DIÁRIO — extraído da planilha de produtividade ----
+        st.markdown("##### 📅 DPA Diário por Analista (dados de Produtividade)")
+        st.caption(
+            "Evolução diária do DPA_RESULTADO por analista, extraído da planilha de Produtividade. "
+            "Valores filtrados entre 0% e 120% para remover outliers."
+        )
+        _dpa_daily_raw = df_filtrado[
+            (df_filtrado[COL_DPA_RESULTADO] >= 0) & (df_filtrado[COL_DPA_RESULTADO] <= 120)
+        ].copy()
+
+        if not _dpa_daily_raw.empty:
+            # Tabela: DPA médio diário por analista
+            _dpa_by_analyst = _dpa_daily_raw.groupby([COL_LOGIN, COL_NOME, "Setor"]).agg(
+                DPA_Media=(COL_DPA_RESULTADO, "mean"),
+                DPA_Min=(COL_DPA_RESULTADO, "min"),
+                DPA_Max=(COL_DPA_RESULTADO, "max"),
+                Dias=(COL_DATA, "nunique"),
+            ).reset_index()
+            _dpa_by_analyst["Nome"] = _dpa_by_analyst[COL_NOME].apply(primeiro_nome)
+            _dpa_by_analyst = _dpa_by_analyst.sort_values("DPA_Media", ascending=False).reset_index(drop=True)
+            _dpa_by_analyst.index += 1; _dpa_by_analyst.index.name = "#"
+            _dpa_by_analyst["Status"] = _dpa_by_analyst["DPA_Media"].apply(_dpa_semaforo)
+
+            _dpa_detail = _dpa_by_analyst[["Status", "Nome", "Setor", "DPA_Media", "DPA_Min", "DPA_Max", "Dias"]].copy()
+            _dpa_detail.columns = ["Status", "Analista", "Setor", "DPA Médio %", "DPA Mín %", "DPA Máx %", "Dias"]
+
+            col_dt, col_dc = st.columns([1, 1])
+            with col_dt:
+                st.dataframe(
+                    _dpa_detail.style
+                        .format({"DPA Médio %": "{:.1f}", "DPA Mín %": "{:.1f}", "DPA Máx %": "{:.1f}"})
+                        .background_gradient(cmap="RdYlGn", subset=["DPA Médio %"], vmin=50, vmax=100),
+                    use_container_width=True, height=500,
+                )
+            with col_dc:
+                _chart_dpa_d = _dpa_by_analyst[["Nome", "DPA_Media"]].set_index("Nome").sort_values("DPA_Media")
+                _chart_dpa_d.columns = ["DPA Médio %"]
+                st.bar_chart(_chart_dpa_d, horizontal=True, color="#16A085", height=500)
+
+            # Evolução diária — linha por analista (média do dia)
+            st.markdown("##### 📈 Evolução Diária do DPA (Média da Equipe)")
+            _dpa_evo = _dpa_daily_raw.groupby(COL_DATA).agg(
+                DPA_Media=(COL_DPA_RESULTADO, "mean"),
+                Analistas=(COL_LOGIN, "nunique"),
+            ).reset_index()
+            _dpa_evo.columns = ["Data", "DPA Médio %", "Analistas"]
+            if not _dpa_evo.empty:
+                c_de1, c_de2 = st.columns(2)
+                with c_de1:
+                    st.line_chart(_dpa_evo[["Data", "DPA Médio %"]].set_index("Data"), color="#16A085", height=250)
+                with c_de2:
+                    st.bar_chart(_dpa_evo[["Data", "Analistas"]].set_index("Data"), color=COR_ALERTA, height=250)
+
+            # Pivot: DPA por analista por dia
+            st.markdown("##### 📋 DPA Diário por Analista (Tabela Detalhada)")
+            _dpa_pivot_raw = _dpa_daily_raw[[COL_NOME, COL_DATA, COL_DPA_RESULTADO]].copy()
+            _dpa_pivot_raw["Nome"] = _dpa_pivot_raw[COL_NOME].apply(primeiro_nome)
+            _dpa_pivot_raw[COL_DATA] = _dpa_pivot_raw[COL_DATA].dt.strftime("%d/%m")
+            try:
+                _dpa_pivot = _dpa_pivot_raw.pivot_table(
+                    index="Nome", columns=COL_DATA, values=COL_DPA_RESULTADO, aggfunc="mean"
+                )
+                _dpa_pivot["Média"] = _dpa_pivot.mean(axis=1)
+                _dpa_pivot = _dpa_pivot.sort_values("Média", ascending=False)
+                _fmt_piv = {c: "{:.0f}" for c in _dpa_pivot.columns}
+                _fmt_piv["Média"] = "{:.1f}"
+                st.dataframe(
+                    _dpa_pivot.style.format(_fmt_piv, na_rep="—")
+                        .background_gradient(cmap="RdYlGn", vmin=50, vmax=100),
+                    use_container_width=True, height=500,
+                )
+            except Exception:
+                st.caption("Não foi possível gerar a tabela pivot de DPA diário.")
+        else:
+            st.caption("Nenhum dado de DPA diário disponível na planilha de Produtividade.")
+
+        st.markdown("---")
+
+        # =============================================
+        # INSIGHTS — OCUPAÇÃO DPA
+        # =============================================
+        st.markdown("### 💡 Insights — Ocupação DPA")
+        _dpa_insights = []
+
+        if not df_dpa_filtrado.empty:
+            _avg_of = df_dpa_filtrado["DPA_Pct_Oficial"].mean()
+            _best_dpa = df_dpa_filtrado.loc[df_dpa_filtrado["DPA_Pct_Oficial"].idxmax()]
+            _worst_dpa = df_dpa_filtrado.loc[df_dpa_filtrado["DPA_Pct_Oficial"].idxmin()]
+            _dpa_insights.append(f"📊 DPA médio oficial da equipe: **{_avg_of:.1f}%** {_dpa_semaforo(_avg_of)}.")
+            _dpa_insights.append(
+                f"🏆 Maior DPA: **{primeiro_nome(_best_dpa['Nome'])}** com **{_best_dpa['DPA_Pct_Oficial']:.1f}%** "
+                f"({_best_dpa['Setor'][:3]})."
+            )
+            _dpa_insights.append(
+                f"⚠️ Menor DPA: **{primeiro_nome(_worst_dpa['Nome'])}** com **{_worst_dpa['DPA_Pct_Oficial']:.1f}%** "
+                f"({_worst_dpa['Setor'][:3]})."
+            )
+
+            _n_green = (df_dpa_filtrado["DPA_Pct_Oficial"] >= DPA_THRESHOLD_OK).sum()
+            _n_red = (df_dpa_filtrado["DPA_Pct_Oficial"] < DPA_THRESHOLD_ALERTA).sum()
+            _n_total = len(df_dpa_filtrado)
+            _dpa_insights.append(f"🟢 {_n_green}/{_n_total} analistas acima de {DPA_THRESHOLD_OK:.0f}%.")
+            if _n_red > 0:
+                _red_names = df_dpa_filtrado[df_dpa_filtrado["DPA_Pct_Oficial"] < DPA_THRESHOLD_ALERTA]["Nome"].apply(primeiro_nome).tolist()
+                _dpa_insights.append(f"🔴 {_n_red} analista(s) abaixo de {DPA_THRESHOLD_ALERTA:.0f}%: {', '.join(_red_names)}.")
+
+            # Comparação por setor
+            for _s in ["EMPRESARIAL", "RESIDENCIAL"]:
+                _sec = df_dpa_filtrado[df_dpa_filtrado["Setor"] == _s]
+                if not _sec.empty:
+                    _icon = "🏢" if _s == "EMPRESARIAL" else "🏠"
+                    _dpa_insights.append(f"{_icon} {_s}: média **{_sec['DPA_Pct_Oficial'].mean():.1f}%** ({len(_sec)} analistas).")
+
+            # DPA diário insights
+            if not _dpa_daily_raw.empty:
+                _daily_avg = _dpa_daily_raw.groupby(COL_DATA)[COL_DPA_RESULTADO].mean()
+                if len(_daily_avg) >= 3:
+                    _last_3 = _daily_avg.tail(3).mean()
+                    _first_3 = _daily_avg.head(3).mean()
+                    _trend = _last_3 - _first_3
+                    _trend_icon = "📈" if _trend > 0 else "📉"
+                    _dpa_insights.append(
+                        f"{_trend_icon} Tendência do DPA diário: média dos últimos 3 dias ({_last_3:.1f}%) "
+                        f"vs primeiros 3 dias ({_first_3:.1f}%) → {'melhora' if _trend > 0 else 'queda'} de {abs(_trend):.1f}pp."
+                    )
+
+        if _dpa_insights:
+            for ins in _dpa_insights:
+                st.markdown(ins)
+        else:
+            st.caption("Sem dados suficientes para gerar insights.")
 
         # ---- Export ----
         st.markdown("---")
