@@ -1017,6 +1017,21 @@ def fech_sir_por_regional(df: pd.DataFrame) -> pd.DataFrame:
     return g.sort_values('Volume', ascending=False).reset_index(drop=True)
 
 
+def fech_sir_por_grupo(df: pd.DataFrame) -> pd.DataFrame:
+    """Assertividade por IN_GRUPO."""
+    if df.empty:
+        return pd.DataFrame()
+    from src.config import FECH_SIR_COL_GRUPO, FECH_SIR_COL_VOLUME
+    if FECH_SIR_COL_GRUPO not in df.columns:
+        return pd.DataFrame()
+    g = df.groupby(FECH_SIR_COL_GRUPO).agg(
+        Volume=(FECH_SIR_COL_VOLUME, 'sum'),
+        Assertivos=('ASSERTIVO', 'sum'),
+    ).reset_index().rename(columns={FECH_SIR_COL_GRUPO: 'Grupo'})
+    g['Assertividade_Pct'] = (g['Assertivos'] / g['Volume'] * 100).round(1)
+    return g.sort_values('Volume', ascending=False).reset_index(drop=True)
+
+
 def fech_sir_por_demanda(df: pd.DataFrame) -> pd.DataFrame:
     """Assertividade por tipo de demanda."""
     if df.empty:

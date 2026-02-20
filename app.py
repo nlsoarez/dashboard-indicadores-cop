@@ -1,5 +1,6 @@
 import traceback
 import io
+import hashlib
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -34,7 +35,7 @@ from src.config import (
     # Fechamento TOA x SIR
     FECH_SIR_COR, FECH_SIR_COL_LOGIN, FECH_SIR_COL_ANOMES, FECH_SIR_COL_VOLUME,
     FECH_SIR_COL_ASSERTIVO, FECH_SIR_COL_NAO_ASSER, FECH_SIR_COL_CAUSA_TOA,
-    FECH_SIR_COL_CAUSA_SIR, FECH_SIR_COL_REGIONAL, FECH_SIR_COL_DEMANDA,
+    FECH_SIR_COL_CAUSA_SIR, FECH_SIR_COL_REGIONAL, FECH_SIR_COL_GRUPO, FECH_SIR_COL_DEMANDA,
     FECH_SIR_COL_DIA, FECH_SIR_TURNO_MADRUGADA,
 )
 from src.processors import (
@@ -62,7 +63,7 @@ from src.processors import (
     # Fechamento TOA x SIR
     load_fechamento_toa_sir, fech_sir_resumo_analista,
     fech_sir_por_causa_toa, fech_sir_por_causa_sir,
-    fech_sir_por_regional, fech_sir_por_demanda, fech_sir_por_dia,
+    fech_sir_por_regional, fech_sir_por_grupo, fech_sir_por_demanda, fech_sir_por_dia,
 )
 
 # =====================================================
@@ -1318,7 +1319,7 @@ if etit_loaded and _tab_etit_idx is not None:
                         use_container_width=True, hide_index=True,
                     )
 
-            col_causa, col_reg = st.columns(2)
+            col_causa, col_turno = st.columns(2)
             with col_causa:
                 st.markdown("**Por Causa**")
                 causa = etit_por_causa(df_etit_filtrado)
@@ -1329,27 +1330,16 @@ if etit_loaded and _tab_etit_idx is not None:
                             .background_gradient(cmap="Purples", subset=["Eventos"]),
                         use_container_width=True, hide_index=True,
                     )
-            with col_reg:
-                st.markdown("**Por Regional**")
-                reg = etit_por_regional(df_etit_filtrado)
-                if not reg.empty:
-                    reg["Aderência %"] = (reg["Aderentes"] / reg["Eventos"] * 100).round(1)
+            with col_turno:
+                st.markdown("**Por Turno**")
+                turno = etit_por_turno(df_etit_filtrado)
+                if not turno.empty:
+                    turno["Aderência %"] = (turno["Aderentes"] / turno["Eventos"] * 100).round(1)
                     st.dataframe(
-                        reg.style.format({"Aderência %": "{:.1f}"}, na_rep="—")
+                        turno.style.format({"Aderência %": "{:.1f}"}, na_rep="—")
                             .background_gradient(cmap="Purples", subset=["Eventos"]),
                         use_container_width=True, hide_index=True,
                     )
-
-            st.markdown("**Por Turno**")
-            turno = etit_por_turno(df_etit_filtrado)
-            if not turno.empty:
-                turno["Aderência %"] = (turno["Aderentes"] / turno["Eventos"] * 100).round(1)
-                col_t1, col_t2 = st.columns([1, 2])
-                with col_t1:
-                    st.dataframe(turno.style.format({"Aderência %": "{:.1f}"}, na_rep="—"),
-                                 use_container_width=True, hide_index=True)
-                with col_t2:
-                    st.bar_chart(turno[["Turno", "Eventos"]].set_index("Turno"), color="#8E44AD", height=250)
 
             st.markdown("---")
             st.markdown("##### 📅 Evolução Diária ETIT")
@@ -1450,18 +1440,28 @@ if res_ind_loaded and _tab_res_idx is not None:
 
                     cr, cn = st.columns(2)
                     with cr:
-                        st.markdown("**Por Regional**")
-                        reg_df = res_por_regional(sub)
-                        if not reg_df.empty:
-                            st.dataframe(
-                                reg_df.style
-                                    .format({"Aderencia_Pct": "{:.1f}"}, na_rep="—")
-                                    .background_gradient(cmap="Blues", subset=["Volume"])
-                                    .background_gradient(cmap="RdYlGn", subset=["Aderencia_Pct"], vmin=50, vmax=100),
-                                use_container_width=True, hide_index=True,
-                            )
-                            st.bar_chart(reg_df[["Regional", "Volume"]].set_index("Regional"),
-                                         color=color, height=200)
+                        if RES_GRUPO in sub.columns:
+                            st.markdown("**Por Grupo (IN_GRUPO)**")
+                            _rg_sub = sub.groupby(RES_GRUPO).agg(
+                                Volume=(RES_COL_VOLUME, "sum"),
+                                Aderentes=("ADERENTE", "sum"),
+                            ).reset_index()
+                            _rg_sub["Aderência %"] = (_rg_sub["Aderentes"] / _rg_sub["Volume"] * 100).round(1)
+                            _rg_sub = _rg_sub.sort_values("Volume", ascending=False).reset_index(drop=True)
+                            if not _rg_sub.empty:
+                                _rg_best = _rg_sub.loc[_rg_sub["Aderência %"].idxmax()]
+                                _rg_worst = _rg_sub.loc[_rg_sub["Aderência %"].idxmin()]
+                                st.caption(
+                                    f"🟢 Melhor: **{_rg_best[RES_GRUPO]}** ({_rg_best['Aderência %']:.1f}%) · "
+                                    f"🔴 Pior: **{_rg_worst[RES_GRUPO]}** ({_rg_worst['Aderência %']:.1f}%)"
+                                )
+                                st.dataframe(
+                                    _rg_sub.style
+                                        .format({"Aderência %": "{:.1f}"}, na_rep="—")
+                                        .background_gradient(cmap="Blues", subset=["Volume"])
+                                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100),
+                                    use_container_width=True, hide_index=True,
+                                )
                     with cn:
                         st.markdown("**Por Natureza**")
                         nat_df = res_por_natureza(sub)
@@ -1497,34 +1497,36 @@ if res_ind_loaded and _tab_res_idx is not None:
                             st.line_chart(evo_df[["Data", "Aderencia_Pct"]].set_index("Data"), color=COR_SUCESSO, height=200)
 
             st.markdown("---")
-            st.markdown("##### 📋 Tabela Consolidada por Regional e Indicador")
-            if not kpis_df.empty:
+            st.markdown("##### 📋 Tabela Consolidada por Grupo e Indicador")
+            if not kpis_df.empty and RES_GRUPO in df_res_filtrado.columns:
                 pivot_list = []
                 for ind in RES_INDICADORES_FILTRO:
                     sub = df_res_filtrado[df_res_filtrado[RES_COL_INDICADOR_NOME] == ind]
                     if sub.empty:
                         continue
-                    reg_df = res_por_regional(sub)
-                    if reg_df.empty:
-                        continue
-                    reg_df["Indicador"] = RES_IND_LABELS.get(ind, ind)
-                    pivot_list.append(reg_df)
+                    _gdf = sub.groupby(RES_GRUPO).agg(
+                        Volume=(RES_COL_VOLUME, "sum"),
+                        Aderentes=("ADERENTE", "sum"),
+                    ).reset_index()
+                    _gdf["Aderencia_Pct"] = (_gdf["Aderentes"] / _gdf["Volume"] * 100).round(1)
+                    _gdf["Indicador"] = RES_IND_LABELS.get(ind, ind)
+                    pivot_list.append(_gdf)
                 if pivot_list:
-                    all_reg = pd.concat(pivot_list, ignore_index=True)
+                    all_grp = pd.concat(pivot_list, ignore_index=True)
                     try:
-                        pivot_tbl = all_reg.pivot_table(
-                            index="Regional", columns="Indicador",
+                        pivot_tbl = all_grp.pivot_table(
+                            index=RES_GRUPO, columns="Indicador",
                             values="Aderencia_Pct", aggfunc="first",
                         ).reset_index()
                         st.dataframe(
                             pivot_tbl.style.format(
-                                {c: "{:.1f}" for c in pivot_tbl.columns if c != "Regional"}, na_rep="—"
+                                {c: "{:.1f}" for c in pivot_tbl.columns if c != RES_GRUPO}, na_rep="—"
                             ).background_gradient(cmap="RdYlGn", vmin=50, vmax=100,
-                                subset=[c for c in pivot_tbl.columns if c != "Regional"]),
+                                subset=[c for c in pivot_tbl.columns if c != RES_GRUPO]),
                             use_container_width=True, hide_index=True,
                         )
                     except Exception:
-                        st.dataframe(all_reg, use_container_width=True, hide_index=True)
+                        st.dataframe(all_grp, use_container_width=True, hide_index=True)
 
             st.markdown("---")
             res_show_cols = [
@@ -1631,24 +1633,13 @@ if toa_loaded and _tab_toa_idx is not None:
                     use_container_width=True, hide_index=True,
                 )
 
-        # Breakdown por Rede e Regional (linha abaixo)
-        col_cr, col_creg = st.columns(2)
-        with col_cr:
-            st.markdown("##### 📡 Por Rede")
-            df_canc_rede = toa_canceladas_por_rede(df_toa)
-            if not df_canc_rede.empty:
-                st.dataframe(
-                    df_canc_rede.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
-                    use_container_width=True, hide_index=True,
-                )
-        with col_creg:
-            st.markdown("##### 🗺️ Por Regional")
-            df_canc_reg = toa_canceladas_por_regional(df_toa)
-            if not df_canc_reg.empty:
-                st.dataframe(
-                    df_canc_reg.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
-                    use_container_width=True, hide_index=True,
-                )
+        st.markdown("##### 📡 Por Rede")
+        df_canc_rede = toa_canceladas_por_rede(df_toa)
+        if not df_canc_rede.empty:
+            st.dataframe(
+                df_canc_rede.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
+                use_container_width=True, hide_index=True,
+            )
 
         # Evolução diária canceladas
         st.markdown("##### 📅 Evolução Diária")
@@ -1724,7 +1715,7 @@ if toa_loaded and _tab_toa_idx is not None:
             st.bar_chart(chart_val, horizontal=True, color="#16A085", height=400)
 
         # Breakdowns por tipo, rede e regional
-        col_v1, col_v2, col_v3 = st.columns(3)
+        col_v1, col_v2 = st.columns(2)
         with col_v1:
             st.markdown("##### 🔧 Por Tipo de Atividade")
             df_val_tipo = toa_validacao_por_tipo(df_toa)
@@ -1745,18 +1736,6 @@ if toa_loaded and _tab_toa_idx is not None:
                 df_val_rede_show.columns = ["Rede", "Total", "Aderentes", "Aderência %", "TMR (min)"]
                 st.dataframe(
                     df_val_rede_show.style
-                        .format({"Aderência %": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
-                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
-                    use_container_width=True, hide_index=True,
-                )
-        with col_v3:
-            st.markdown("##### 🗺️ Por Regional")
-            df_val_reg = toa_validacao_por_regional(df_toa)
-            if not df_val_reg.empty:
-                df_val_reg_show = df_val_reg[["Regional", "Total", "Aderentes", "Aderencia_Pct", "TMR_Medio_min"]].copy()
-                df_val_reg_show.columns = ["Regional", "Total", "Aderentes", "Aderência %", "TMR (min)"]
-                st.dataframe(
-                    df_val_reg_show.style
                         .format({"Aderência %": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
                         .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
                     use_container_width=True, hide_index=True,
@@ -2104,11 +2083,11 @@ if fech_sir_loaded and _tab_fech_sir_idx is not None:
 
         bc3, bc4 = st.columns(2)
         with bc3:
-            st.markdown("##### 🗺️ Por Regional")
-            _reg_fech = fech_sir_por_regional(df_fech_sir)
-            if not _reg_fech.empty:
+            st.markdown("##### 🏢 Por Grupo (IN_GRUPO)")
+            _grp_fech = fech_sir_por_grupo(df_fech_sir)
+            if not _grp_fech.empty:
                 st.dataframe(
-                    _reg_fech.style
+                    _grp_fech.style
                         .format({"Assertividade_Pct": "{:.1f}"}, na_rep="—")
                         .background_gradient(cmap="RdYlGn", subset=["Assertividade_Pct"], vmin=50, vmax=100),
                     use_container_width=True, hide_index=True,
@@ -2163,7 +2142,7 @@ if fech_sir_loaded and _tab_fech_sir_idx is not None:
         _fech_export_cols = [c for c in [
             FECH_SIR_COL_LOGIN, 'Nome', 'Setor', FECH_SIR_COL_ANOMES,
             FECH_SIR_COL_VOLUME, 'ASSERTIVO', FECH_SIR_COL_CAUSA_TOA,
-            FECH_SIR_COL_CAUSA_SIR, FECH_SIR_COL_REGIONAL, FECH_SIR_COL_DEMANDA,
+            FECH_SIR_COL_CAUSA_SIR, FECH_SIR_COL_GRUPO, FECH_SIR_COL_DEMANDA,
             FECH_SIR_COL_DIA,
         ] if c in df_fech_sir.columns]
         csv_fech = df_fech_sir[_fech_export_cols].to_csv(index=False).encode("utf-8")
