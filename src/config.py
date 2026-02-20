@@ -313,6 +313,13 @@ FECH_SIR_COL_STATUS     = "STATUS"
 FECH_SIR_COR = "#8E44AD"   # roxo — assertividade TOA x SIR
 
 # =====================================================
+# FILTRO REGIONAL
+# =====================================================
+# Filtra todos os dados para a regional Leste apenas.
+# Altere aqui caso a regional mude.
+REGIONAL_FILTRO = "Leste"
+
+# =====================================================
 # CORES DO DASHBOARD
 # =====================================================
 COR_PRIMARIA = "#1B4F72"
