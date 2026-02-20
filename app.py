@@ -13,7 +13,7 @@ from src.config import (
     # ETIT
     ETIT_COL_LOGIN, ETIT_COL_DEMANDA, ETIT_COL_VOLUME,
     ETIT_COL_STATUS, ETIT_COL_TIPO, ETIT_COL_CAUSA,
-    ETIT_COL_REGIONAL, ETIT_COL_TURNO, ETIT_COL_TMA, ETIT_COL_TMR,
+    ETIT_COL_REGIONAL, ETIT_COL_GRUPO, ETIT_COL_TURNO, ETIT_COL_TMA, ETIT_COL_TMR,
     ETIT_COL_DT_ACIONAMENTO, ETIT_COL_ANOMES, ETIT_COL_INDICADOR_VAL,
     ETIT_COL_NOTA, ETIT_COL_AREA, ETIT_COL_CIDADE, ETIT_COL_UF,
     # Residencial Indicadores
@@ -24,6 +24,7 @@ from src.config import (
     RES_COL_STATUS, RES_COL_REGIONAL as RES_REGIONAL,
     RES_COL_DT_INICIO, RES_COL_TMA as RES_TMA, RES_COL_TMR as RES_TMR,
     RES_COL_SOLUCAO, RES_COL_IMPACTO, RES_COL_NATUREZA,
+    RES_COL_GRUPO as RES_GRUPO,
     RES_COL_CIDADE, RES_COL_UF as RES_UF, RES_COL_ANOMES as RES_ANOMES,
     RES_COL_ID_MOSTRA,
     # DPA Ocupação
@@ -45,7 +46,7 @@ from src.processors import (
     res_por_natureza, res_por_solucao, res_por_impacto,
     res_evolucao_diaria,
     # DPA Ocupação
-    load_dpa_ocupacao, dpa_ranking, dpa_comparativo,
+    load_dpa_ocupacao, dpa_ranking,
     # Indicadores TOA
     load_toa_indicadores, toa_resumo_por_indicador,
     toa_canceladas_por_analista, toa_canceladas_por_tipo,
@@ -1016,6 +1017,103 @@ with tabs[1]:
     else:
         st.info("Nenhum líder encontrado nos dados filtrados.")
 
+    # ---- ETIT dos Líderes ----
+    if etit_loaded and not df_etit_filtrado.empty:
+        _etit_lid = df_etit_filtrado[df_etit_filtrado[ETIT_COL_LOGIN].isin(LIDERES_IDS)].copy()
+        if not _etit_lid.empty:
+            st.markdown("---")
+            st.markdown("#### ⚡ ETIT dos Líderes")
+            _META_ETIT = 90.0
+            for _dem_tipo in ["RAL", "REC"]:
+                _dem_df = _etit_lid[_etit_lid[ETIT_COL_DEMANDA] == _dem_tipo]
+                if _dem_df.empty:
+                    continue
+                st.markdown(f"##### {_dem_tipo} — Meta {_META_ETIT:.0f}%")
+                _lid_etit_grp = _dem_df.groupby(ETIT_COL_LOGIN).agg(
+                    Volume=(ETIT_COL_VOLUME, "sum") if ETIT_COL_VOLUME in _dem_df.columns else (ETIT_COL_STATUS, "count"),
+                    Aderentes=(ETIT_COL_STATUS, lambda x: (x == "ADERENTE").sum()),
+                ).reset_index()
+                _lid_etit_grp["Aderência %"] = (_lid_etit_grp["Aderentes"] / _lid_etit_grp["Volume"] * 100).round(1)
+                # Map login to name
+                _login_nome = _dem_df.drop_duplicates(ETIT_COL_LOGIN)[[ETIT_COL_LOGIN, "Nome"]].set_index(ETIT_COL_LOGIN)["Nome"]
+                _lid_etit_grp["Analista"] = _lid_etit_grp[ETIT_COL_LOGIN].map(_login_nome).apply(primeiro_nome)
+                _lid_etit_grp = _lid_etit_grp.sort_values("Aderência %", ascending=False).reset_index(drop=True)
+                _lid_etit_grp.index += 1; _lid_etit_grp.index.name = "#"
+                _lid_etit_show = _lid_etit_grp[["Analista", "Volume", "Aderentes", "Aderência %"]]
+                st.dataframe(
+                    _lid_etit_show.style
+                        .format({"Aderência %": "{:.1f}"}, na_rep="—")
+                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100),
+                    use_container_width=True,
+                )
+
+    # ---- TOA dos Líderes ----
+    if toa_loaded and not df_toa.empty:
+        _toa_lid = df_toa[(df_toa["Setor"] == "EMPRESARIAL") & (df_toa["LOGIN"].isin(LIDERES_IDS))].copy()
+        if not _toa_lid.empty:
+            st.markdown("---")
+            st.markdown("#### 📋 TOA dos Líderes")
+
+            # Canceladas
+            _toa_lid_canc = _toa_lid[_toa_lid["INDICADOR_NOME"] == TOA_IND_CANCELADAS]
+            if not _toa_lid_canc.empty:
+                st.markdown("##### ❌ Canceladas")
+                _lc = _toa_lid_canc.groupby(["LOGIN", "Nome"]).size().reset_index(name="Canceladas")
+                _lc["Analista"] = _lc["Nome"].apply(primeiro_nome)
+                _lc = _lc.sort_values("Canceladas", ascending=True).reset_index(drop=True)
+                _lc.index += 1; _lc.index.name = "#"
+                st.dataframe(
+                    _lc[["Analista", "Canceladas"]].style
+                        .background_gradient(cmap="Reds", subset=["Canceladas"]),
+                    use_container_width=True,
+                )
+
+            # Validação
+            _toa_lid_val = _toa_lid[_toa_lid["INDICADOR_NOME"] == TOA_IND_VALIDACAO]
+            if not _toa_lid_val.empty:
+                st.markdown("##### ✅ Validação do Formulário")
+                _lv = _toa_lid_val.groupby(["LOGIN", "Nome"]).agg(
+                    Total=("INDICADOR", "count"),
+                    Aderentes=("ADERENTE", "sum"),
+                ).reset_index()
+                _lv["Aderência %"] = (_lv["Aderentes"] / _lv["Total"] * 100).round(1)
+                if "TMR_min" in _toa_lid_val.columns:
+                    _lv_tmr = _toa_lid_val.groupby("LOGIN")["TMR_min"].mean().reset_index()
+                    _lv_tmr.columns = ["LOGIN", "TMR (min)"]
+                    _lv = _lv.merge(_lv_tmr, on="LOGIN", how="left")
+                _lv["Analista"] = _lv["Nome"].apply(primeiro_nome)
+                _lv = _lv.sort_values("Aderência %", ascending=False).reset_index(drop=True)
+                _lv.index += 1; _lv.index.name = "#"
+                _lv_cols = ["Analista", "Total", "Aderentes", "Aderência %"]
+                _lv_fmt = {"Aderência %": "{:.1f}"}
+                if "TMR (min)" in _lv.columns:
+                    _lv_cols.append("TMR (min)")
+                    _lv_fmt["TMR (min)"] = "{:.1f}"
+                st.dataframe(
+                    _lv[_lv_cols].style
+                        .format(_lv_fmt, na_rep="—")
+                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
+                    use_container_width=True,
+                )
+
+    # ---- DPA dos Líderes ----
+    if dpa_loaded and not df_dpa_filtrado.empty:
+        _dpa_lid = df_dpa_filtrado[df_dpa_filtrado["Login"].isin(LIDERES_IDS)].copy()
+        if not _dpa_lid.empty:
+            st.markdown("---")
+            st.markdown("#### 📊 DPA dos Líderes")
+            _dpa_lid["Analista"] = _dpa_lid["Nome"].apply(primeiro_nome)
+            _dpa_lid = _dpa_lid.sort_values("DPA_Pct_Oficial", ascending=False).reset_index(drop=True)
+            _dpa_lid.index += 1; _dpa_lid.index.name = "#"
+            _dpa_lid_show = _dpa_lid[["Analista", "Setor", "DPA_Pct_Oficial"]].copy()
+            _dpa_lid_show.columns = ["Analista", "Setor", "DPA %"]
+            st.dataframe(
+                _dpa_lid_show.style
+                    .format({"DPA %": "{:.1f}"})
+                    .background_gradient(cmap="RdYlGn", subset=["DPA %"], vmin=50, vmax=100),
+                use_container_width=True,
+            )
+
 
 # ---- TAB 2: EVOLUÇÃO DIÁRIA ----
 with tabs[2]:
@@ -1110,68 +1208,121 @@ with tabs[4]:
 # ---- TAB 5: ETIT POR EVENTO ----
 if etit_loaded and _tab_etit_idx is not None:
     with tabs[_tab_etit_idx]:
+        # Excluir líderes da análise principal
+        _etit_eq = df_etit_filtrado[~df_etit_filtrado[ETIT_COL_LOGIN].isin(LIDERES_IDS)].copy()
+
         st.markdown("#### ⚡ ETIT POR EVENTO — Análise da Equipe")
-        if df_etit_filtrado.empty:
+        st.caption("Dados dos analistas (sem líderes). Meta de aderência: **90%** para RAL e REC.")
+
+        if _etit_eq.empty:
             st.warning("Nenhum dado ETIT POR EVENTO encontrado com os filtros atuais.")
         else:
-            etit_total_eventos = df_etit_filtrado[ETIT_COL_VOLUME].sum()
-            etit_total_ader = df_etit_filtrado[ETIT_COL_INDICADOR_VAL].sum()
-            etit_pct_ader = (etit_total_ader / etit_total_eventos * 100) if etit_total_eventos > 0 else 0
-            etit_n_analistas = df_etit_filtrado[ETIT_COL_LOGIN].nunique()
-            etit_tma_geral = df_etit_filtrado[ETIT_COL_TMA].mean()
-            etit_tmr_geral = df_etit_filtrado[ETIT_COL_TMR].mean()
+            # ---- Seção RAL e REC separadas ----
+            _META_ETIT = 90.0
+            for _dem_tipo in ["RAL", "REC"]:
+                _dem_df = _etit_eq[_etit_eq[ETIT_COL_DEMANDA] == _dem_tipo]
+                if _dem_df.empty:
+                    continue
+                _dem_vol = _dem_df[ETIT_COL_VOLUME].sum()
+                _dem_ader = _dem_df[ETIT_COL_INDICADOR_VAL].sum()
+                _dem_pct = (_dem_ader / _dem_vol * 100) if _dem_vol > 0 else 0
+                _dem_tma = _dem_df[ETIT_COL_TMA].mean()
+                _dem_tmr = _dem_df[ETIT_COL_TMR].mean()
+                _dem_n = _dem_df[ETIT_COL_LOGIN].nunique()
+                _meta_ok = _dem_pct >= _META_ETIT
+                _meta_icon = "✅" if _meta_ok else "❌"
+                _meta_color = COR_SUCESSO if _meta_ok else COR_PERIGO
 
-            ek1, ek2, ek3, ek4, ek5, ek6 = st.columns(6)
-            with ek1:
-                st.markdown(kpi_card("Total Eventos", f"{etit_total_eventos:,.0f}", "#8E44AD"), unsafe_allow_html=True)
-            with ek2:
-                st.markdown(kpi_card("Aderentes", f"{etit_total_ader:,.0f}", COR_SUCESSO), unsafe_allow_html=True)
-            with ek3:
-                ad_c = COR_SUCESSO if etit_pct_ader >= 90 else (COR_ALERTA if etit_pct_ader >= 70 else COR_PERIGO)
-                st.markdown(kpi_card("Aderência", f"{etit_pct_ader:.1f}", ad_c, suffix="%"), unsafe_allow_html=True)
-            with ek4:
-                st.markdown(kpi_card("Analistas", f"{etit_n_analistas}", COR_INFO), unsafe_allow_html=True)
-            with ek5:
-                st.markdown(kpi_card("TMA Médio", f"{etit_tma_geral:.4f}", COR_PRIMARIA), unsafe_allow_html=True)
-            with ek6:
-                st.markdown(kpi_card("TMR Médio", f"{etit_tmr_geral:.4f}", COR_ALERTA), unsafe_allow_html=True)
+                st.markdown(f"### {_meta_icon} {_dem_tipo} — Aderência: **{_dem_pct:.1f}%** (Meta: {_META_ETIT:.0f}%)")
+                dk1, dk2, dk3, dk4, dk5 = st.columns(5)
+                with dk1:
+                    st.markdown(kpi_card(f"Eventos {_dem_tipo}", f"{_dem_vol:,.0f}", "#8E44AD"), unsafe_allow_html=True)
+                with dk2:
+                    st.markdown(kpi_card("Aderentes", f"{_dem_ader:,.0f}", COR_SUCESSO), unsafe_allow_html=True)
+                with dk3:
+                    st.markdown(kpi_card("Aderência", f"{_dem_pct:.1f}", _meta_color, suffix="%"), unsafe_allow_html=True)
+                with dk4:
+                    st.markdown(kpi_card("TMA Médio", f"{_dem_tma:.4f}", COR_PRIMARIA), unsafe_allow_html=True)
+                with dk5:
+                    st.markdown(kpi_card("Analistas", f"{_dem_n}", COR_INFO), unsafe_allow_html=True)
 
-            st.markdown("##### 🏆 Ranking ETIT por Analista")
-            resumo_etit = etit_resumo_analista(df_etit_filtrado)
-            if not resumo_etit.empty:
-                disp_etit = resumo_etit.copy()
-                disp_etit["Nome"] = disp_etit["Nome"].apply(primeiro_nome)
-                disp_cols_etit = ["Nome", "Setor", "Total_Eventos", "Eventos_Aderentes",
-                                  "Aderencia_Pct", "RAL_Count", "REC_Count", "TMA_Medio", "TMR_Medio"]
-                disp_cols_etit = [c for c in disp_cols_etit if c in disp_etit.columns]
-                tbl_etit = disp_etit[disp_cols_etit].copy()
-                tbl_etit.columns = [
-                    c.replace("Total_Eventos","Eventos").replace("Eventos_Aderentes","Aderentes")
-                     .replace("Aderencia_Pct","Aderência %").replace("RAL_Count","RAL")
-                     .replace("REC_Count","REC").replace("TMA_Medio","TMA").replace("TMR_Medio","TMR")
-                    for c in disp_cols_etit
-                ]
-                tbl_etit = tbl_etit.reset_index(drop=True); tbl_etit.index += 1; tbl_etit.index.name = "#"
-                styled_etit = tbl_etit.style.format({"Aderência %": "{:.1f}", "TMA": "{:.4f}", "TMR": "{:.4f}"}, na_rep="—")
-                styled_etit = styled_etit.background_gradient(cmap="Purples", subset=["Eventos"])
-                if "Aderência %" in tbl_etit.columns and tbl_etit["Aderência %"].notna().any():
-                    styled_etit = styled_etit.background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100)
-                st.dataframe(styled_etit, use_container_width=True)
+                # Ranking por analista para esta demanda
+                _dem_rank = _dem_df.groupby([ETIT_COL_LOGIN, "Nome", "Setor"]).agg(
+                    Eventos=(ETIT_COL_VOLUME, "sum"),
+                    Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+                    TMA=(ETIT_COL_TMA, "mean"),
+                    TMR=(ETIT_COL_TMR, "mean"),
+                ).reset_index()
+                _dem_rank["Aderência %"] = (_dem_rank["Aderentes"] / _dem_rank["Eventos"] * 100).round(1)
+                _dem_rank["Nome"] = _dem_rank["Nome"].apply(primeiro_nome)
+                _dem_rank["TMA"] = _dem_rank["TMA"].round(4)
+                _dem_rank["TMR"] = _dem_rank["TMR"].round(4)
+                _dem_rank = _dem_rank.sort_values("Eventos", ascending=False).reset_index(drop=True)
+                _dem_rank.index += 1; _dem_rank.index.name = "#"
 
-            col_dem, col_tipo = st.columns(2)
-            with col_dem:
-                st.markdown("**Por Demanda (RAL/REC)**")
-                dem = etit_por_demanda(df_etit_filtrado)
-                if not dem.empty:
-                    dem["Aderência %"] = (dem["Aderentes"] / dem["Eventos"] * 100).round(1)
-                    st.dataframe(
-                        dem.rename(columns={"TMA_Medio": "TMA", "TMR_Medio": "TMR"})
-                           .style.format({"Aderência %": "{:.1f}", "TMA": "{:.4f}", "TMR": "{:.4f}"}, na_rep="—"),
-                        use_container_width=True, hide_index=True,
+                col_rk, col_gr = st.columns(2)
+                with col_rk:
+                    st.markdown(f"**Ranking {_dem_tipo} por Analista**")
+                    _dem_show = _dem_rank[["Nome", "Setor", "Eventos", "Aderentes", "Aderência %", "TMA", "TMR"]]
+                    _sty = _dem_show.style.format({"Aderência %": "{:.1f}", "TMA": "{:.4f}", "TMR": "{:.4f}"}, na_rep="—")
+                    _sty = _sty.background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100)
+                    _sty = _sty.background_gradient(cmap="Purples", subset=["Eventos"])
+                    st.dataframe(_sty, use_container_width=True)
+
+                with col_gr:
+                    # IN_GRUPO para esta demanda
+                    if ETIT_COL_GRUPO in _dem_df.columns:
+                        st.markdown(f"**{_dem_tipo} por Grupo (IN_GRUPO)**")
+                        _g = _dem_df.groupby(ETIT_COL_GRUPO).agg(
+                            Eventos=(ETIT_COL_VOLUME, "sum"),
+                            Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+                        ).reset_index().rename(columns={ETIT_COL_GRUPO: "Grupo"})
+                        _g["Aderência %"] = (_g["Aderentes"] / _g["Eventos"] * 100).round(1)
+                        _g = _g.sort_values("Eventos", ascending=False).reset_index(drop=True)
+                        if not _g.empty:
+                            _best_g = _g.loc[_g["Aderência %"].idxmax()]
+                            _worst_g = _g.loc[_g["Aderência %"].idxmin()]
+                            st.caption(
+                                f"🟢 Melhor: **{_best_g['Grupo']}** ({_best_g['Aderência %']:.1f}%) · "
+                                f"🔴 Pior: **{_worst_g['Grupo']}** ({_worst_g['Aderência %']:.1f}%)"
+                            )
+                            _sg = _g.style.format({"Aderência %": "{:.1f}"}, na_rep="—")
+                            _sg = _sg.background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100)
+                            _sg = _sg.background_gradient(cmap="Purples", subset=["Eventos"])
+                            st.dataframe(_sg, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+
+            # ---- IN_GRUPO geral ----
+            if ETIT_COL_GRUPO in _etit_eq.columns:
+                st.markdown("##### 📍 Visão Geral por Grupo (IN_GRUPO)")
+                _gg = _etit_eq.groupby(ETIT_COL_GRUPO).agg(
+                    Eventos=(ETIT_COL_VOLUME, "sum"),
+                    Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
+                    TMA=(ETIT_COL_TMA, "mean"),
+                    TMR=(ETIT_COL_TMR, "mean"),
+                ).reset_index().rename(columns={ETIT_COL_GRUPO: "Grupo"})
+                _gg["Aderência %"] = (_gg["Aderentes"] / _gg["Eventos"] * 100).round(1)
+                _gg["TMA"] = _gg["TMA"].round(4)
+                _gg["TMR"] = _gg["TMR"].round(4)
+                _gg = _gg.sort_values("Eventos", ascending=False).reset_index(drop=True)
+                if not _gg.empty:
+                    _bg = _gg.loc[_gg["Aderência %"].idxmax()]
+                    _wg = _gg.loc[_gg["Aderência %"].idxmin()]
+                    st.caption(
+                        f"🟢 Melhor grupo: **{_bg['Grupo']}** ({_bg['Aderência %']:.1f}%) · "
+                        f"🔴 Pior grupo: **{_wg['Grupo']}** ({_wg['Aderência %']:.1f}%)"
                     )
+                    _sgg = _gg.style.format({"Aderência %": "{:.1f}", "TMA": "{:.4f}", "TMR": "{:.4f}"}, na_rep="—")
+                    _sgg = _sgg.background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100)
+                    st.dataframe(_sgg, use_container_width=True, hide_index=True)
+                st.markdown("---")
+
+            # ---- Breakdowns existentes ----
+            col_tipo, col_causa = st.columns(2)
             with col_tipo:
                 st.markdown("**Por Tipo**")
-                tipo = etit_por_tipo(df_etit_filtrado)
+                tipo = etit_por_tipo(_etit_eq)
                 if not tipo.empty:
                     tipo["Aderência %"] = (tipo["Aderentes"] / tipo["Eventos"] * 100).round(1)
                     st.dataframe(
@@ -1179,11 +1330,9 @@ if etit_loaded and _tab_etit_idx is not None:
                             .background_gradient(cmap="Purples", subset=["Eventos"]),
                         use_container_width=True, hide_index=True,
                     )
-
-            col_causa, col_reg = st.columns(2)
             with col_causa:
                 st.markdown("**Por Causa**")
-                causa = etit_por_causa(df_etit_filtrado)
+                causa = etit_por_causa(_etit_eq)
                 if not causa.empty:
                     causa["Aderência %"] = (causa["Aderentes"] / causa["Eventos"] * 100).round(1)
                     st.dataframe(
@@ -1191,52 +1340,44 @@ if etit_loaded and _tab_etit_idx is not None:
                             .background_gradient(cmap="Purples", subset=["Eventos"]),
                         use_container_width=True, hide_index=True,
                     )
+
+            col_reg, col_turno = st.columns(2)
             with col_reg:
                 st.markdown("**Por Regional**")
-                reg = etit_por_regional(df_etit_filtrado)
+                reg = etit_por_regional(_etit_eq)
                 if not reg.empty:
                     reg["Aderência %"] = (reg["Aderentes"] / reg["Eventos"] * 100).round(1)
-                    st.dataframe(
-                        reg.style.format({"Aderência %": "{:.1f}"}, na_rep="—")
-                            .background_gradient(cmap="Purples", subset=["Eventos"]),
-                        use_container_width=True, hide_index=True,
-                    )
-
-            st.markdown("**Por Turno**")
-            turno = etit_por_turno(df_etit_filtrado)
-            if not turno.empty:
-                turno["Aderência %"] = (turno["Aderentes"] / turno["Eventos"] * 100).round(1)
-                col_t1, col_t2 = st.columns([1, 2])
-                with col_t1:
-                    st.dataframe(turno.style.format({"Aderência %": "{:.1f}"}, na_rep="—"),
-                                 use_container_width=True, hide_index=True)
-                with col_t2:
-                    st.bar_chart(turno[["Turno", "Eventos"]].set_index("Turno"), color="#8E44AD", height=250)
+                    st.dataframe(reg.style.format({"Aderência %": "{:.1f}"}, na_rep="—"), use_container_width=True, hide_index=True)
+            with col_turno:
+                st.markdown("**Por Turno**")
+                turno = etit_por_turno(_etit_eq)
+                if not turno.empty:
+                    turno["Aderência %"] = (turno["Aderentes"] / turno["Eventos"] * 100).round(1)
+                    st.dataframe(turno.style.format({"Aderência %": "{:.1f}"}, na_rep="—"), use_container_width=True, hide_index=True)
 
             st.markdown("---")
             st.markdown("##### 📅 Evolução Diária ETIT")
-            daily_etit = etit_evolucao_diaria(df_etit_filtrado)
+            daily_etit = etit_evolucao_diaria(_etit_eq)
             if not daily_etit.empty:
-                st.area_chart(daily_etit[["Data", "Eventos"]].set_index("Data"), color="#8E44AD", height=300)
-                st.line_chart(daily_etit[["Data", "Aderencia_Pct"]].set_index("Data"), color=COR_SUCESSO, height=250)
+                st.area_chart(daily_etit[["Data", "Eventos"]].set_index("Data"), color="#8E44AD", height=250)
 
             st.markdown("---")
             etit_show_cols = [
                 ETIT_COL_LOGIN, "Nome", "Setor", ETIT_COL_DEMANDA, ETIT_COL_NOTA,
                 ETIT_COL_STATUS, ETIT_COL_TIPO, ETIT_COL_CAUSA,
-                ETIT_COL_REGIONAL, ETIT_COL_CIDADE, ETIT_COL_UF,
+                ETIT_COL_GRUPO, ETIT_COL_REGIONAL, ETIT_COL_CIDADE, ETIT_COL_UF,
                 ETIT_COL_TURNO, ETIT_COL_TMA, ETIT_COL_TMR,
                 ETIT_COL_DT_ACIONAMENTO, ETIT_COL_ANOMES,
             ]
-            etit_show_cols = [c for c in etit_show_cols if c in df_etit_filtrado.columns]
+            etit_show_cols = [c for c in etit_show_cols if c in _etit_eq.columns]
             st.dataframe(
-                df_etit_filtrado[etit_show_cols].sort_values(
-                    [ETIT_COL_DT_ACIONAMENTO] if ETIT_COL_DT_ACIONAMENTO in df_etit_filtrado.columns else ["Nome"],
+                _etit_eq[etit_show_cols].sort_values(
+                    [ETIT_COL_DT_ACIONAMENTO] if ETIT_COL_DT_ACIONAMENTO in _etit_eq.columns else ["Nome"],
                     ascending=False,
                 ),
                 use_container_width=True, height=500,
             )
-            csv_etit = df_etit_filtrado[etit_show_cols].to_csv(index=False).encode("utf-8")
+            csv_etit = _etit_eq[etit_show_cols].to_csv(index=False).encode("utf-8")
             st.download_button("📥 Baixar ETIT filtrado (CSV)", csv_etit, "etit_por_evento_equipe.csv", "text/csv")
 
 
@@ -1282,6 +1423,52 @@ if res_ind_loaded and _tab_res_idx is not None:
                 chart_ader = chart_ader.set_index("Indicador")
                 chart_ader.columns = ["Aderência %"]
                 st.bar_chart(chart_ader, color=COR_SUCESSO, height=300)
+
+            # ---- IN_GRUPO breakdown ----
+            if RES_GRUPO in _res_data.columns:
+                st.markdown("---")
+                st.markdown("##### 📍 Desempenho por Grupo (IN_GRUPO)")
+                _rg = _res_data.groupby(RES_GRUPO).agg(
+                    Volume=(RES_COL_VOLUME, "sum"), Aderentes=("ADERENTE", "sum"),
+                ).reset_index().rename(columns={RES_GRUPO: "Grupo"})
+                _rg["Aderência %"] = (_rg["Aderentes"] / _rg["Volume"] * 100).round(1)
+                _rg = _rg.sort_values("Volume", ascending=False).reset_index(drop=True)
+                if not _rg.empty:
+                    _rg_best = _rg.loc[_rg["Aderência %"].idxmax()]
+                    _rg_worst = _rg.loc[_rg["Aderência %"].idxmin()]
+                    st.caption(
+                        f"🟢 Melhor grupo: **{_rg_best['Grupo']}** ({_rg_best['Aderência %']:.1f}%) · "
+                        f"🔴 Pior grupo: **{_rg_worst['Grupo']}** ({_rg_worst['Aderência %']:.1f}%)"
+                    )
+                    _srg = _rg.style.format({"Aderência %": "{:.1f}"}, na_rep="—")
+                    _srg = _srg.background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100)
+                    _srg = _srg.background_gradient(cmap="Blues", subset=["Volume"])
+                    st.dataframe(_srg, use_container_width=True, hide_index=True)
+
+                    # IN_GRUPO por indicador
+                    st.markdown("**IN_GRUPO por Indicador**")
+                    for _ri in RES_INDICADORES_FILTRO:
+                        _ri_sub = _res_data[_res_data[RES_COL_INDICADOR_NOME] == _ri]
+                        if _ri_sub.empty:
+                            continue
+                        _ri_g = _ri_sub.groupby(RES_GRUPO).agg(
+                            Volume=(RES_COL_VOLUME, "sum"), Aderentes=("ADERENTE", "sum"),
+                        ).reset_index().rename(columns={RES_GRUPO: "Grupo"})
+                        _ri_g["Aderência %"] = (_ri_g["Aderentes"] / _ri_g["Volume"] * 100).round(1)
+                        _ri_g = _ri_g.sort_values("Volume", ascending=False).reset_index(drop=True)
+                        if not _ri_g.empty:
+                            _ri_best = _ri_g.loc[_ri_g["Aderência %"].idxmax()]
+                            _ri_worst = _ri_g.loc[_ri_g["Aderência %"].idxmin()]
+                            with st.expander(
+                                f"📊 {RES_IND_LABELS.get(_ri, _ri)} — "
+                                f"Melhor: {_ri_best['Grupo']} ({_ri_best['Aderência %']:.1f}%) · "
+                                f"Pior: {_ri_worst['Grupo']} ({_ri_worst['Aderência %']:.1f}%)"
+                            ):
+                                st.dataframe(
+                                    _ri_g.style.format({"Aderência %": "{:.1f}"}, na_rep="—")
+                                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100),
+                                    use_container_width=True, hide_index=True,
+                                )
 
             st.markdown("---")
             ind_to_show = (
@@ -1431,15 +1618,15 @@ if res_ind_loaded and _tab_res_idx is not None:
 # ---- TAB: INDICADORES TOA ----
 if toa_loaded and _tab_toa_idx is not None:
     with tabs[_tab_toa_idx]:
-        # ---- Filtrar somente EMPRESARIAL ----
-        df_toa_emp = df_toa[df_toa["Setor"] == "EMPRESARIAL"].copy()
+        # ---- Filtrar somente EMPRESARIAL e excluir líderes ----
+        df_toa_emp = df_toa[(df_toa["Setor"] == "EMPRESARIAL") & (~df_toa["LOGIN"].isin(LIDERES_IDS))].copy()
         anomes_str = str(toa_anomes) if toa_anomes else "?"
         st.markdown(
             f"#### 📋 Indicadores TOA — Empresarial · "
             f"Período: **{anomes_str}** (mês mais recente)"
         )
         st.caption(
-            "🏢 Dados filtrados para o setor **Empresarial**. "
+            "🏢 Dados dos analistas empresariais (sem líderes). "
             "Tarefas Canceladas: menor = melhor. Tempo de Validação: maior aderência% = melhor."
         )
 
@@ -1531,6 +1718,37 @@ if toa_loaded and _tab_toa_idx is not None:
                         df_canc_reg.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
                         use_container_width=True, hide_index=True,
                     )
+
+            # ---- SOLUCAO para Canceladas ----
+            _canc_sub = df_toa_emp[df_toa_emp["INDICADOR_NOME"] == TOA_IND_CANCELADAS]
+            col_sol, col_grp = st.columns(2)
+            with col_sol:
+                if "SOLUCAO" in _canc_sub.columns:
+                    st.markdown("##### 🔧 Por Solução")
+                    _cs = _canc_sub.groupby("SOLUCAO").size().reset_index(name="Canceladas")
+                    _cs = _cs.sort_values("Canceladas", ascending=False).reset_index(drop=True)
+                    if not _cs.empty:
+                        st.dataframe(
+                            _cs.head(15).style.background_gradient(cmap="Reds", subset=["Canceladas"]),
+                            use_container_width=True, hide_index=True,
+                        )
+            with col_grp:
+                if "IN_GRUPO" in _canc_sub.columns:
+                    st.markdown("##### 📍 Canceladas por Grupo (IN_GRUPO)")
+                    _cg = _canc_sub.groupby("IN_GRUPO").size().reset_index(name="Canceladas")
+                    _cg = _cg.sort_values("Canceladas", ascending=False).reset_index(drop=True)
+                    _cg["% do Total"] = (_cg["Canceladas"] / _cg["Canceladas"].sum() * 100).round(1)
+                    if not _cg.empty:
+                        _cg_best = _cg.loc[_cg["Canceladas"].idxmin()]
+                        _cg_worst = _cg.loc[_cg["Canceladas"].idxmax()]
+                        st.caption(
+                            f"🟢 Menor: **{_cg_best['IN_GRUPO']}** ({int(_cg_best['Canceladas'])}) · "
+                            f"🔴 Maior: **{_cg_worst['IN_GRUPO']}** ({int(_cg_worst['Canceladas'])})"
+                        )
+                        st.dataframe(
+                            _cg.style.background_gradient(cmap="Reds", subset=["Canceladas"]),
+                            use_container_width=True, hide_index=True,
+                        )
 
             st.markdown("##### 📅 Evolução Diária — Canceladas")
             df_canc_evo = toa_canceladas_evolucao(df_toa_emp)
@@ -1624,6 +1842,37 @@ if toa_loaded and _tab_toa_idx is not None:
                             .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
                         use_container_width=True, hide_index=True,
                     )
+
+            # ---- IN_GRUPO para Validação ----
+            _val_sub = df_toa_emp[df_toa_emp["INDICADOR_NOME"] == TOA_IND_VALIDACAO]
+            if "IN_GRUPO" in _val_sub.columns and not _val_sub.empty:
+                st.markdown("##### 📍 Validação por Grupo (IN_GRUPO)")
+                _vg = _val_sub.groupby("IN_GRUPO").agg(
+                    Total=("INDICADOR", "count"),
+                    Aderentes=("ADERENTE", "sum"),
+                ).reset_index()
+                _vg["Aderência %"] = (_vg["Aderentes"] / _vg["Total"] * 100).round(1)
+                if "TMR_min" in _val_sub.columns:
+                    _vg_tmr = _val_sub.groupby("IN_GRUPO")["TMR_min"].mean().reset_index()
+                    _vg_tmr.columns = ["IN_GRUPO", "TMR (min)"]
+                    _vg = _vg.merge(_vg_tmr, on="IN_GRUPO", how="left")
+                _vg = _vg.sort_values("Aderência %", ascending=False).reset_index(drop=True)
+                if not _vg.empty and len(_vg) >= 2:
+                    _vg_best = _vg.iloc[0]
+                    _vg_worst = _vg.iloc[-1]
+                    st.caption(
+                        f"🟢 Melhor: **{_vg_best['IN_GRUPO']}** ({_vg_best['Aderência %']:.1f}%) · "
+                        f"🔴 Pior: **{_vg_worst['IN_GRUPO']}** ({_vg_worst['Aderência %']:.1f}%)"
+                    )
+                _fmt_vg = {"Aderência %": "{:.1f}"}
+                if "TMR (min)" in _vg.columns:
+                    _fmt_vg["TMR (min)"] = "{:.1f}"
+                st.dataframe(
+                    _vg.style
+                        .format(_fmt_vg, na_rep="—")
+                        .background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=40, vmax=100),
+                    use_container_width=True, hide_index=True,
+                )
 
             st.markdown("##### 📅 Evolução Diária — Validação do Formulário")
             df_val_evo = toa_validacao_evolucao(df_toa_emp)
@@ -1779,7 +2028,7 @@ if dpa_loaded and _tab_dpa_idx is not None:
             with col_s:
                 icon_s = "🏢" if setor_s == "EMPRESARIAL" else "🏠"
                 st.markdown(f"**{icon_s} {setor_s}**")
-                df_sec_s = df_dpa_filtrado[df_dpa_filtrado["Setor"] == setor_s].copy()
+                df_sec_s = df_dpa_filtrado[(df_dpa_filtrado["Setor"] == setor_s) & (~df_dpa_filtrado["Login"].isin(LIDERES_IDS))].copy()
                 if df_sec_s.empty:
                     st.caption("Sem dados.")
                     continue
@@ -1804,7 +2053,7 @@ if dpa_loaded and _tab_dpa_idx is not None:
         st.markdown("##### 🚦 Painel de Semáforo — Todos os Analistas")
         n_cards = 4
         card_cols = st.columns(n_cards)
-        sorted_dpa = df_dpa_filtrado.sort_values("DPA_Pct_Oficial", ascending=False).reset_index(drop=True)
+        sorted_dpa = df_dpa_filtrado[~df_dpa_filtrado["Login"].isin(LIDERES_IDS)].sort_values("DPA_Pct_Oficial", ascending=False).reset_index(drop=True)
         for ci, (_, arow) in enumerate(sorted_dpa.iterrows()):
             pct_v = arow["DPA_Pct_Oficial"]
             nome_c = primeiro_nome(arow["Nome"])
@@ -1820,105 +2069,6 @@ if dpa_loaded and _tab_dpa_idx is not None:
                     <div class="dpa-nome">{sem_icon} {nome_c} <span style="font-size:0.72rem;opacity:0.55;">{setor_c}</span></div>
                     <div class="dpa-val" style="color:{sem_color};">{pct_v:.1f}%</div>
                 </div>""", unsafe_allow_html=True)
-
-        st.markdown("---")
-
-        # ---- Comparativo DPA Oficial vs Calculado (se produtividade carregada) ----
-        resumo_prod_for_comp = resumo_geral(df_filtrado)
-        if not resumo_prod_for_comp.empty:
-            comp_df = dpa_comparativo(df_dpa_filtrado, resumo_prod_for_comp)
-            if not comp_df.empty and "DPA Calculado %" in comp_df.columns:
-                st.markdown("##### 🔄 Comparativo: DPA Oficial vs DPA Calculado (Produtividade)")
-                st.caption(
-                    "DPA Oficial = extraído da planilha Ocupação DPA 2026. "
-                    "DPA Calculado = derivado da coluna DPA_RESULTADO da planilha de Produtividade."
-                )
-                comp_df = comp_df.sort_values("DPA Oficial %", ascending=False).reset_index(drop=True)
-                comp_df.index += 1; comp_df.index.name = "#"
-                fmt_comp = {"DPA Oficial %": "{:.1f}", "DPA Calculado %": "{:.1f}", "Diferença": "{:+.1f}"}
-                styled_comp = comp_df.style.format(fmt_comp, na_rep="—")
-                styled_comp = styled_comp.background_gradient(cmap="RdYlGn", subset=["DPA Oficial %"], vmin=50, vmax=100)
-                if comp_df["Diferença"].notna().any():
-                    styled_comp = styled_comp.background_gradient(cmap="RdYlGn", subset=["Diferença"], vmin=-20, vmax=20)
-                st.dataframe(styled_comp, use_container_width=True)
-
-        st.markdown("---")
-
-        # ---- DPA DIÁRIO — extraído da planilha de produtividade ----
-        st.markdown("##### 📅 DPA Diário por Analista (dados de Produtividade)")
-        st.caption(
-            "Evolução diária do DPA_RESULTADO por analista, extraído da planilha de Produtividade. "
-            "Valores filtrados entre 0% e 120% para remover outliers."
-        )
-        _dpa_daily_raw = df_filtrado[
-            (df_filtrado[COL_DPA_RESULTADO] >= 0) & (df_filtrado[COL_DPA_RESULTADO] <= 120)
-        ].copy()
-
-        if not _dpa_daily_raw.empty:
-            # Tabela: DPA médio diário por analista
-            _dpa_by_analyst = _dpa_daily_raw.groupby([COL_LOGIN, COL_NOME, "Setor"]).agg(
-                DPA_Media=(COL_DPA_RESULTADO, "mean"),
-                DPA_Min=(COL_DPA_RESULTADO, "min"),
-                DPA_Max=(COL_DPA_RESULTADO, "max"),
-                Dias=(COL_DATA, "nunique"),
-            ).reset_index()
-            _dpa_by_analyst["Nome"] = _dpa_by_analyst[COL_NOME].apply(primeiro_nome)
-            _dpa_by_analyst = _dpa_by_analyst.sort_values("DPA_Media", ascending=False).reset_index(drop=True)
-            _dpa_by_analyst.index += 1; _dpa_by_analyst.index.name = "#"
-            _dpa_by_analyst["Status"] = _dpa_by_analyst["DPA_Media"].apply(_dpa_semaforo)
-
-            _dpa_detail = _dpa_by_analyst[["Status", "Nome", "Setor", "DPA_Media", "DPA_Min", "DPA_Max", "Dias"]].copy()
-            _dpa_detail.columns = ["Status", "Analista", "Setor", "DPA Médio %", "DPA Mín %", "DPA Máx %", "Dias"]
-
-            col_dt, col_dc = st.columns([1, 1])
-            with col_dt:
-                st.dataframe(
-                    _dpa_detail.style
-                        .format({"DPA Médio %": "{:.1f}", "DPA Mín %": "{:.1f}", "DPA Máx %": "{:.1f}"})
-                        .background_gradient(cmap="RdYlGn", subset=["DPA Médio %"], vmin=50, vmax=100),
-                    use_container_width=True, height=500,
-                )
-            with col_dc:
-                _chart_dpa_d = _dpa_by_analyst[["Nome", "DPA_Media"]].set_index("Nome").sort_values("DPA_Media")
-                _chart_dpa_d.columns = ["DPA Médio %"]
-                st.bar_chart(_chart_dpa_d, horizontal=True, color="#16A085", height=500)
-
-            # Evolução diária — linha por analista (média do dia)
-            st.markdown("##### 📈 Evolução Diária do DPA (Média da Equipe)")
-            _dpa_evo = _dpa_daily_raw.groupby(COL_DATA).agg(
-                DPA_Media=(COL_DPA_RESULTADO, "mean"),
-                Analistas=(COL_LOGIN, "nunique"),
-            ).reset_index()
-            _dpa_evo.columns = ["Data", "DPA Médio %", "Analistas"]
-            if not _dpa_evo.empty:
-                c_de1, c_de2 = st.columns(2)
-                with c_de1:
-                    st.line_chart(_dpa_evo[["Data", "DPA Médio %"]].set_index("Data"), color="#16A085", height=250)
-                with c_de2:
-                    st.bar_chart(_dpa_evo[["Data", "Analistas"]].set_index("Data"), color=COR_ALERTA, height=250)
-
-            # Pivot: DPA por analista por dia
-            st.markdown("##### 📋 DPA Diário por Analista (Tabela Detalhada)")
-            _dpa_pivot_raw = _dpa_daily_raw[[COL_NOME, COL_DATA, COL_DPA_RESULTADO]].copy()
-            _dpa_pivot_raw["Nome"] = _dpa_pivot_raw[COL_NOME].apply(primeiro_nome)
-            _dpa_pivot_raw[COL_DATA] = _dpa_pivot_raw[COL_DATA].dt.strftime("%d/%m")
-            try:
-                _dpa_pivot = _dpa_pivot_raw.pivot_table(
-                    index="Nome", columns=COL_DATA, values=COL_DPA_RESULTADO, aggfunc="mean"
-                )
-                _dpa_pivot["Média"] = _dpa_pivot.mean(axis=1)
-                _dpa_pivot = _dpa_pivot.sort_values("Média", ascending=False)
-                _fmt_piv = {c: "{:.0f}" for c in _dpa_pivot.columns}
-                _fmt_piv["Média"] = "{:.1f}"
-                st.dataframe(
-                    _dpa_pivot.style.format(_fmt_piv, na_rep="—")
-                        .background_gradient(cmap="RdYlGn", vmin=50, vmax=100),
-                    use_container_width=True, height=500,
-                )
-            except Exception:
-                st.caption("Não foi possível gerar a tabela pivot de DPA diário.")
-        else:
-            st.caption("Nenhum dado de DPA diário disponível na planilha de Produtividade.")
 
         st.markdown("---")
 
@@ -1956,19 +2106,6 @@ if dpa_loaded and _tab_dpa_idx is not None:
                 if not _sec.empty:
                     _icon = "🏢" if _s == "EMPRESARIAL" else "🏠"
                     _dpa_insights.append(f"{_icon} {_s}: média **{_sec['DPA_Pct_Oficial'].mean():.1f}%** ({len(_sec)} analistas).")
-
-            # DPA diário insights
-            if not _dpa_daily_raw.empty:
-                _daily_avg = _dpa_daily_raw.groupby(COL_DATA)[COL_DPA_RESULTADO].mean()
-                if len(_daily_avg) >= 3:
-                    _last_3 = _daily_avg.tail(3).mean()
-                    _first_3 = _daily_avg.head(3).mean()
-                    _trend = _last_3 - _first_3
-                    _trend_icon = "📈" if _trend > 0 else "📉"
-                    _dpa_insights.append(
-                        f"{_trend_icon} Tendência do DPA diário: média dos últimos 3 dias ({_last_3:.1f}%) "
-                        f"vs primeiros 3 dias ({_first_3:.1f}%) → {'melhora' if _trend > 0 else 'queda'} de {abs(_trend):.1f}pp."
-                    )
 
         if _dpa_insights:
             for ins in _dpa_insights:
