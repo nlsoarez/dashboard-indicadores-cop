@@ -4,6 +4,7 @@ import openpyxl
 import io
 from src.config import (
     EQUIPE_IDS, BASE_EQUIPE, HEADER_ROW, SHEET_NAME_CANDIDATES,
+    REGIONAL_FILTRO,
     COL_LOGIN, COL_NOME, COL_BASE, COL_DATA, COL_MES, COL_ANOMES,
     COL_VOL_TOTAL, COL_VOL_MEDIA, COL_DPA_USO, COL_DPA_JORNADA,
     COL_DPA_RESULTADO, VOL_COLS, COL_CARGO, COL_PERIODO, COL_COORD,
@@ -119,6 +120,10 @@ def load_etit(uploaded_file) -> pd.DataFrame:
     df[ETIT_COL_LOGIN] = df[ETIT_COL_LOGIN].astype(str).str.strip()
     df_equipe = df[df[ETIT_COL_LOGIN].isin(EQUIPE_IDS)].copy()
 
+    # Filtra regional Leste
+    if ETIT_COL_REGIONAL in df_equipe.columns:
+        df_equipe = df_equipe[df_equipe[ETIT_COL_REGIONAL] == REGIONAL_FILTRO].copy()
+
     # Merge com info da equipe (nome e setor)
     df_equipe = df_equipe.merge(
         BASE_EQUIPE[["Matricula", "Nome", "Setor"]],
@@ -152,23 +157,20 @@ def etit_resumo_analista(df: pd.DataFrame) -> pd.DataFrame:
         REC_Count=(ETIT_COL_DEMANDA, lambda x: (x == "REC").sum()),
     ).reset_index()
     group["Aderencia_Pct"] = (group["Eventos_Aderentes"] / group["Total_Eventos"] * 100).round(1)
-    group["TMA_Medio"] = (group["TMA_Medio"] * 1440).round(1)   # dias → minutos
-    group["TMR_Medio"] = (group["TMR_Medio"] * 1440).round(1)   # dias → minutos
+    group["TMA_Medio"] = group["TMA_Medio"].round(4)
+    group["TMR_Medio"] = group["TMR_Medio"].round(4)
     return group.sort_values("Total_Eventos", ascending=False).reset_index(drop=True)
 
 
 def etit_por_demanda(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
-    g = df.groupby(ETIT_COL_DEMANDA).agg(
+    return df.groupby(ETIT_COL_DEMANDA).agg(
         Eventos=(ETIT_COL_VOLUME, "sum"),
         Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
         TMA_Medio=(ETIT_COL_TMA, "mean"),
         TMR_Medio=(ETIT_COL_TMR, "mean"),
     ).reset_index().rename(columns={ETIT_COL_DEMANDA: "Demanda"})
-    g["TMA_Medio"] = (g["TMA_Medio"] * 1440).round(1)
-    g["TMR_Medio"] = (g["TMR_Medio"] * 1440).round(1)
-    return g
 
 
 def etit_por_tipo(df: pd.DataFrame) -> pd.DataFrame:
@@ -249,6 +251,13 @@ def load_residencial_indicadores(uploaded_file) -> pd.DataFrame:
     if df.empty:
         return df
 
+    # Filtra regional Leste
+    if RES_COL_REGIONAL in df.columns:
+        df = df[df[RES_COL_REGIONAL] == REGIONAL_FILTRO].copy()
+
+    if df.empty:
+        return df
+
     for c in [RES_COL_VOLUME, RES_COL_INDICADOR_VAL, RES_COL_TMA, RES_COL_TMR]:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -292,10 +301,6 @@ def res_kpis_por_indicador(df: pd.DataFrame) -> pd.DataFrame:
         + (["TMR_Medio"] if has_tmr else [])
     )
     g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
-    if "TMA_Medio" in g.columns:
-        g["TMA_Medio"] = (g["TMA_Medio"] * 1440).round(1)   # dias → minutos
-    if "TMR_Medio" in g.columns:
-        g["TMR_Medio"] = (g["TMR_Medio"] * 1440).round(1)   # dias → minutos
     order = {ind: i for i, ind in enumerate(RES_INDICADORES_FILTRO)}
     g["_ord"] = g["Indicador"].map(order)
     return g.sort_values("_ord").drop(columns="_ord").reset_index(drop=True)
@@ -606,6 +611,12 @@ def load_toa_indicadores(uploaded_file) -> pd.DataFrame:
 
     # Filtrar equipe
     df = df[df[TOA_COL_LOGIN].isin(EQUIPE_IDS)].copy()
+    if df.empty:
+        return df
+
+    # Filtrar regional Leste
+    if TOA_COL_REGIONAL in df.columns:
+        df = df[df[TOA_COL_REGIONAL] == REGIONAL_FILTRO].copy()
     if df.empty:
         return df
 
@@ -943,6 +954,13 @@ def load_fechamento_toa_sir(uploaded_file) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
 
+    # Filtrar regional Leste
+    from src.config import FECH_SIR_COL_REGIONAL, REGIONAL_FILTRO as _REGIONAL
+    if FECH_SIR_COL_REGIONAL in df.columns:
+        df = df[df[FECH_SIR_COL_REGIONAL] == _REGIONAL].copy()
+    if df.empty:
+        return pd.DataFrame()
+
     # Merge com nome e setor
     base = BASE_EQUIPE.copy()
     base['Matricula_upper'] = base['Matricula'].str.upper()
@@ -1013,21 +1031,6 @@ def fech_sir_por_regional(df: pd.DataFrame) -> pd.DataFrame:
         Volume=(FECH_SIR_COL_VOLUME, 'sum'),
         Assertivos=('ASSERTIVO', 'sum'),
     ).reset_index().rename(columns={FECH_SIR_COL_REGIONAL: 'Regional'})
-    g['Assertividade_Pct'] = (g['Assertivos'] / g['Volume'] * 100).round(1)
-    return g.sort_values('Volume', ascending=False).reset_index(drop=True)
-
-
-def fech_sir_por_grupo(df: pd.DataFrame) -> pd.DataFrame:
-    """Assertividade por IN_GRUPO."""
-    if df.empty:
-        return pd.DataFrame()
-    from src.config import FECH_SIR_COL_GRUPO, FECH_SIR_COL_VOLUME
-    if FECH_SIR_COL_GRUPO not in df.columns:
-        return pd.DataFrame()
-    g = df.groupby(FECH_SIR_COL_GRUPO).agg(
-        Volume=(FECH_SIR_COL_VOLUME, 'sum'),
-        Assertivos=('ASSERTIVO', 'sum'),
-    ).reset_index().rename(columns={FECH_SIR_COL_GRUPO: 'Grupo'})
     g['Assertividade_Pct'] = (g['Assertivos'] / g['Volume'] * 100).round(1)
     return g.sort_values('Volume', ascending=False).reset_index(drop=True)
 
