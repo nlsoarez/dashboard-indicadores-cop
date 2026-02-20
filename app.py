@@ -14,7 +14,7 @@ from src.config import (
     # ETIT
     ETIT_COL_LOGIN, ETIT_COL_DEMANDA, ETIT_COL_VOLUME,
     ETIT_COL_STATUS, ETIT_COL_TIPO, ETIT_COL_CAUSA,
-    ETIT_COL_REGIONAL, ETIT_COL_TURNO, ETIT_COL_TMA, ETIT_COL_TMR,
+    ETIT_COL_REGIONAL, ETIT_COL_GRUPO, ETIT_COL_TURNO, ETIT_COL_TMA, ETIT_COL_TMR,
     ETIT_COL_DT_ACIONAMENTO, ETIT_COL_ANOMES, ETIT_COL_INDICADOR_VAL,
     ETIT_COL_NOTA, ETIT_COL_AREA, ETIT_COL_CIDADE, ETIT_COL_UF,
     # Residencial Indicadores
@@ -22,7 +22,7 @@ from src.config import (
     RES_IND_INVERTIDOS, RES_IND_ETIT_FIBRA_HFC, RES_IND_ETIT_GPON,
     RES_IND_REPROG_GPON, RES_IND_ASSERT_FIBRA_HFC, RES_IND_ASSERT_GPON,
     RES_COL_INDICADOR_NOME, RES_COL_VOLUME, RES_COL_INDICADOR_VAL as RES_COL_IND_VAL,
-    RES_COL_STATUS, RES_COL_REGIONAL as RES_REGIONAL,
+    RES_COL_STATUS, RES_COL_REGIONAL as RES_REGIONAL, RES_COL_GRUPO,
     RES_COL_DT_INICIO, RES_COL_TMA as RES_TMA, RES_COL_TMR as RES_TMR,
     RES_COL_SOLUCAO, RES_COL_IMPACTO, RES_COL_NATUREZA,
     RES_COL_CIDADE, RES_COL_UF as RES_UF, RES_COL_ANOMES as RES_ANOMES,
@@ -35,7 +35,7 @@ from src.config import (
     # Fechamento TOA x SIR
     FECH_SIR_COR, FECH_SIR_COL_LOGIN, FECH_SIR_COL_ANOMES, FECH_SIR_COL_VOLUME,
     FECH_SIR_COL_ASSERTIVO, FECH_SIR_COL_NAO_ASSER, FECH_SIR_COL_CAUSA_TOA,
-    FECH_SIR_COL_CAUSA_SIR, FECH_SIR_COL_REGIONAL, FECH_SIR_COL_DEMANDA,
+    FECH_SIR_COL_CAUSA_SIR, FECH_SIR_COL_REGIONAL, FECH_SIR_COL_GRUPO, FECH_SIR_COL_DEMANDA,
     FECH_SIR_COL_DIA, FECH_SIR_TURNO_MADRUGADA,
 )
 from src.processors import (
@@ -63,7 +63,7 @@ from src.processors import (
     # Fechamento TOA x SIR
     load_fechamento_toa_sir, fech_sir_resumo_analista,
     fech_sir_por_causa_toa, fech_sir_por_causa_sir,
-    fech_sir_por_regional, fech_sir_por_demanda, fech_sir_por_dia,
+    fech_sir_por_regional, fech_sir_por_grupo, fech_sir_por_demanda, fech_sir_por_dia,
 )
 
 # =====================================================
