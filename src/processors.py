@@ -60,8 +60,7 @@ def load_produtividade(uploaded_file) -> pd.DataFrame:
 
     df = pd.read_excel(uploaded_file, sheet_name=sheet_to_read, header=HEADER_ROW)
 
-    # Remove colunas sem cabeçalho (Unnamed ou NaN)
-    df.columns = [str(c) for c in df.columns]
+    # Remove coluna unnamed
     df = df.loc[:, ~df.columns.str.startswith("Unnamed")]
 
     # Filtra equipe
@@ -619,14 +618,7 @@ def load_toa_indicadores(uploaded_file) -> pd.DataFrame:
 
     # TMR já vem como timedelta; converter para minutos para facilitar análise
     if TOA_COL_TMR in df.columns:
-        try:
-            if pd.api.types.is_timedelta64_dtype(df[TOA_COL_TMR]):
-                df["TMR_min"] = df[TOA_COL_TMR].dt.total_seconds() / 60
-            else:
-                df[TOA_COL_TMR] = pd.to_timedelta(df[TOA_COL_TMR], errors="coerce")
-                df["TMR_min"] = df[TOA_COL_TMR].dt.total_seconds() / 60
-        except Exception:
-            df["TMR_min"] = pd.to_numeric(df[TOA_COL_TMR], errors="coerce")
+        df["TMR_min"] = df[TOA_COL_TMR].dt.total_seconds() / 60
 
     # Coluna ADERENTE normalizada:
     # Canceladas: INDICADOR=1 → NÃO ADERENTE → invertemos
@@ -828,3 +820,223 @@ def toa_validacao_evolucao(df: pd.DataFrame) -> pd.DataFrame:
     g["Aderencia_Pct"] = (g["Aderentes"] / g["Total"] * 100).round(1)
     g["TMR_Medio_min"]  = g["TMR_Medio_min"].round(2)
     return g.sort_values("Data").reset_index(drop=True)
+
+
+# =====================================================
+# FECHAMENTO TOA x SIR — Loader e processadores
+# =====================================================
+
+def _parse_pivot_cache(raw_bytes: bytes) -> pd.DataFrame:
+    """
+    Extrai registros brutos do pivot cache interno de um arquivo xlsx.
+    Retorna DataFrame com todas as colunas presentes no cache.
+    """
+    import zipfile
+    import xml.etree.ElementTree as ET
+    import io
+
+    ns = {'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+
+    with zipfile.ZipFile(io.BytesIO(raw_bytes)) as zf:
+        # Ler definição do pivot cache
+        def_xml = zf.read('xl/pivotCache/pivotCacheDefinition1.xml')
+        rec_xml = zf.read('xl/pivotCache/pivotCacheRecords1.xml')
+
+    tree_def = ET.fromstring(def_xml)
+    fields   = tree_def.findall('.//x:cacheField', ns)
+    field_names = [f.get('name') for f in fields]
+
+    # Construir itens compartilhados por campo
+    shared = {}
+    for i, field in enumerate(fields):
+        items = []
+        si = field.find('x:sharedItems', ns)
+        if si is not None:
+            for child in si:
+                tag = child.tag.split('}')[-1]
+                if tag == 's':
+                    items.append(child.get('v'))
+                elif tag == 'n':
+                    items.append(float(child.get('v')))
+                elif tag in ('b', 'd'):
+                    items.append(child.get('v'))
+                else:
+                    items.append(None)
+        shared[i] = items
+
+    # Parsear registros
+    root_rec = ET.fromstring(rec_xml)
+    records = []
+    for record in root_rec.findall('x:r', ns):
+        row = {}
+        for fi, child in enumerate(list(record)):
+            if fi >= len(field_names):
+                break
+            fname = field_names[fi]
+            tag = child.tag.split('}')[-1]
+            if tag == 'x':       # referência a item compartilhado
+                ref = int(child.get('v', 0))
+                row[fname] = shared[fi][ref] if ref < len(shared[fi]) else None
+            elif tag == 'n':
+                row[fname] = float(child.get('v', 0))
+            elif tag == 's':
+                row[fname] = child.get('v')
+            elif tag == 'm':
+                row[fname] = None
+            else:
+                row[fname] = child.get('v')
+        records.append(row)
+
+    return pd.DataFrame(records)
+
+
+def load_fechamento_toa_sir(uploaded_file) -> pd.DataFrame:
+    """
+    Carrega a planilha Fechamento_TOA_x_SIR.xlsx lendo o pivot cache interno.
+    Filtra automaticamente:
+      - TURNO = 'Madrugada'
+      - ANOMES = mais recente
+      - LOGIN_VALIDOU_FECHAMENTO = equipe monitorada
+    Retorna DataFrame pronto para análise com coluna ASSERTIVO (0/1).
+    """
+    from src.config import (
+        EQUIPE_IDS, BASE_EQUIPE,
+        FECH_SIR_COL_LOGIN, FECH_SIR_COL_TURNO, FECH_SIR_COL_ANOMES,
+        FECH_SIR_COL_VOLUME, FECH_SIR_COL_ASSERTIVO, FECH_SIR_COL_NAO_ASSER,
+        FECH_SIR_TURNO_MADRUGADA,
+    )
+
+    if hasattr(uploaded_file, 'read'):
+        raw_bytes = uploaded_file.read()
+    else:
+        raw_bytes = uploaded_file
+
+    df = _parse_pivot_cache(raw_bytes)
+    if df.empty:
+        return pd.DataFrame()
+
+    # Normalizar login
+    df[FECH_SIR_COL_LOGIN] = df[FECH_SIR_COL_LOGIN].astype(str).str.strip().str.upper()
+
+    # Filtrar ANOMES mais recente
+    if FECH_SIR_COL_ANOMES in df.columns:
+        df[FECH_SIR_COL_ANOMES] = pd.to_numeric(df[FECH_SIR_COL_ANOMES], errors='coerce')
+        anomes_max = df[FECH_SIR_COL_ANOMES].max()
+        df = df[df[FECH_SIR_COL_ANOMES] == anomes_max].copy()
+
+    # Filtrar madrugada
+    if FECH_SIR_COL_TURNO in df.columns:
+        df = df[df[FECH_SIR_COL_TURNO] == FECH_SIR_TURNO_MADRUGADA].copy()
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # Filtrar equipe (case-insensitive)
+    df = df[df[FECH_SIR_COL_LOGIN].str.upper().isin({e.upper() for e in EQUIPE_IDS})].copy()
+    if df.empty:
+        return pd.DataFrame()
+
+    # Merge com nome e setor
+    base = BASE_EQUIPE.copy()
+    base['Matricula_upper'] = base['Matricula'].str.upper()
+    df['_login_up'] = df[FECH_SIR_COL_LOGIN].str.upper()
+    df = df.merge(
+        base[['Matricula_upper', 'Matricula', 'Nome', 'Setor']],
+        left_on='_login_up', right_on='Matricula_upper', how='left'
+    ).drop(columns=['_login_up', 'Matricula_upper'])
+
+    # Garantir tipos numéricos
+    for c in [FECH_SIR_COL_VOLUME, FECH_SIR_COL_ASSERTIVO, FECH_SIR_COL_NAO_ASSER]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+
+    # Coluna booleana normalizada
+    df['ASSERTIVO'] = (df[FECH_SIR_COL_ASSERTIVO] == 1).astype(int)
+
+    return df
+
+
+def fech_sir_resumo_analista(df: pd.DataFrame) -> pd.DataFrame:
+    """Resumo de assertividade por analista."""
+    if df.empty:
+        return pd.DataFrame()
+    from src.config import FECH_SIR_COL_LOGIN, FECH_SIR_COL_VOLUME, FECH_SIR_COL_ASSERTIVO
+    g = df.groupby([FECH_SIR_COL_LOGIN, 'Nome', 'Setor']).agg(
+        Volume=(FECH_SIR_COL_VOLUME, 'sum'),
+        Assertivos=('ASSERTIVO', 'sum'),
+    ).reset_index().rename(columns={FECH_SIR_COL_LOGIN: 'Login'})
+    g['Assertividade_Pct'] = (g['Assertivos'] / g['Volume'] * 100).round(1)
+    return g.sort_values('Assertividade_Pct', ascending=False).reset_index(drop=True)
+
+
+def fech_sir_por_causa_toa(df: pd.DataFrame, top_n: int = 15) -> pd.DataFrame:
+    """Volume não assertivo por causa TOA."""
+    if df.empty:
+        return pd.DataFrame()
+    from src.config import FECH_SIR_COL_CAUSA_TOA, FECH_SIR_COL_VOLUME
+    nao_asser = df[df['ASSERTIVO'] == 0]
+    if nao_asser.empty or FECH_SIR_COL_CAUSA_TOA not in nao_asser.columns:
+        return pd.DataFrame()
+    g = nao_asser.groupby(FECH_SIR_COL_CAUSA_TOA)[FECH_SIR_COL_VOLUME].sum().reset_index()
+    g.columns = ['Causa TOA', 'Não Assertivo']
+    return g.sort_values('Não Assertivo', ascending=False).head(top_n).reset_index(drop=True)
+
+
+def fech_sir_por_causa_sir(df: pd.DataFrame, top_n: int = 15) -> pd.DataFrame:
+    """Volume não assertivo por causa SIR."""
+    if df.empty:
+        return pd.DataFrame()
+    from src.config import FECH_SIR_COL_CAUSA_SIR, FECH_SIR_COL_VOLUME
+    nao_asser = df[df['ASSERTIVO'] == 0]
+    if nao_asser.empty or FECH_SIR_COL_CAUSA_SIR not in nao_asser.columns:
+        return pd.DataFrame()
+    g = nao_asser.groupby(FECH_SIR_COL_CAUSA_SIR)[FECH_SIR_COL_VOLUME].sum().reset_index()
+    g.columns = ['Causa SIR', 'Não Assertivo']
+    return g.sort_values('Não Assertivo', ascending=False).head(top_n).reset_index(drop=True)
+
+
+def fech_sir_por_regional(df: pd.DataFrame) -> pd.DataFrame:
+    """Assertividade por regional."""
+    if df.empty:
+        return pd.DataFrame()
+    from src.config import FECH_SIR_COL_REGIONAL, FECH_SIR_COL_VOLUME
+    if FECH_SIR_COL_REGIONAL not in df.columns:
+        return pd.DataFrame()
+    g = df.groupby(FECH_SIR_COL_REGIONAL).agg(
+        Volume=(FECH_SIR_COL_VOLUME, 'sum'),
+        Assertivos=('ASSERTIVO', 'sum'),
+    ).reset_index().rename(columns={FECH_SIR_COL_REGIONAL: 'Regional'})
+    g['Assertividade_Pct'] = (g['Assertivos'] / g['Volume'] * 100).round(1)
+    return g.sort_values('Volume', ascending=False).reset_index(drop=True)
+
+
+def fech_sir_por_demanda(df: pd.DataFrame) -> pd.DataFrame:
+    """Assertividade por tipo de demanda."""
+    if df.empty:
+        return pd.DataFrame()
+    from src.config import FECH_SIR_COL_DEMANDA, FECH_SIR_COL_VOLUME
+    if FECH_SIR_COL_DEMANDA not in df.columns:
+        return pd.DataFrame()
+    g = df.groupby(FECH_SIR_COL_DEMANDA).agg(
+        Volume=(FECH_SIR_COL_VOLUME, 'sum'),
+        Assertivos=('ASSERTIVO', 'sum'),
+    ).reset_index().rename(columns={FECH_SIR_COL_DEMANDA: 'Demanda'})
+    g['Assertividade_Pct'] = (g['Assertivos'] / g['Volume'] * 100).round(1)
+    return g.sort_values('Volume', ascending=False).reset_index(drop=True)
+
+
+def fech_sir_por_dia(df: pd.DataFrame) -> pd.DataFrame:
+    """Evolução diária de assertividade."""
+    if df.empty:
+        return pd.DataFrame()
+    from src.config import FECH_SIR_COL_DIA, FECH_SIR_COL_VOLUME
+    if FECH_SIR_COL_DIA not in df.columns:
+        return pd.DataFrame()
+    df2 = df.copy()
+    df2['_dia'] = pd.to_numeric(df2[FECH_SIR_COL_DIA], errors='coerce')
+    g = df2.groupby('_dia').agg(
+        Volume=(FECH_SIR_COL_VOLUME, 'sum'),
+        Assertivos=('ASSERTIVO', 'sum'),
+    ).reset_index().rename(columns={'_dia': 'Dia'})
+    g['Assertividade_Pct'] = (g['Assertivos'] / g['Volume'] * 100).round(1)
+    return g.sort_values('Dia').reset_index(drop=True)
