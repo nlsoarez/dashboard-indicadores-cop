@@ -153,20 +153,23 @@ def etit_resumo_analista(df: pd.DataFrame) -> pd.DataFrame:
         REC_Count=(ETIT_COL_DEMANDA, lambda x: (x == "REC").sum()),
     ).reset_index()
     group["Aderencia_Pct"] = (group["Eventos_Aderentes"] / group["Total_Eventos"] * 100).round(1)
-    group["TMA_Medio"] = group["TMA_Medio"].round(4)
-    group["TMR_Medio"] = group["TMR_Medio"].round(4)
+    group["TMA_Medio"] = (group["TMA_Medio"] * 1440).round(1)   # dias → minutos
+    group["TMR_Medio"] = (group["TMR_Medio"] * 1440).round(1)   # dias → minutos
     return group.sort_values("Total_Eventos", ascending=False).reset_index(drop=True)
 
 
 def etit_por_demanda(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
-    return df.groupby(ETIT_COL_DEMANDA).agg(
+    g = df.groupby(ETIT_COL_DEMANDA).agg(
         Eventos=(ETIT_COL_VOLUME, "sum"),
         Aderentes=(ETIT_COL_INDICADOR_VAL, "sum"),
         TMA_Medio=(ETIT_COL_TMA, "mean"),
         TMR_Medio=(ETIT_COL_TMR, "mean"),
     ).reset_index().rename(columns={ETIT_COL_DEMANDA: "Demanda"})
+    g["TMA_Medio"] = (g["TMA_Medio"] * 1440).round(1)
+    g["TMR_Medio"] = (g["TMR_Medio"] * 1440).round(1)
+    return g
 
 
 def etit_por_tipo(df: pd.DataFrame) -> pd.DataFrame:
@@ -290,6 +293,10 @@ def res_kpis_por_indicador(df: pd.DataFrame) -> pd.DataFrame:
         + (["TMR_Medio"] if has_tmr else [])
     )
     g["Aderencia_Pct"] = (g["Aderentes"] / g["Volume"] * 100).round(1)
+    if "TMA_Medio" in g.columns:
+        g["TMA_Medio"] = (g["TMA_Medio"] * 1440).round(1)   # dias → minutos
+    if "TMR_Medio" in g.columns:
+        g["TMR_Medio"] = (g["TMR_Medio"] * 1440).round(1)   # dias → minutos
     order = {ind: i for i, ind in enumerate(RES_INDICADORES_FILTRO)}
     g["_ord"] = g["Indicador"].map(order)
     return g.sort_values("_ord").drop(columns="_ord").reset_index(drop=True)

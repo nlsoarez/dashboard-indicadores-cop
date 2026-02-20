@@ -374,65 +374,42 @@ def render_sector_table(resumo_df, sector_name, sector_vol, sector_cmap):
 
 
 # =====================================================
-# HEADER
+# SIDEBAR — Upload de planilhas e filtros
 # =====================================================
-st.markdown("""
-<div class="main-header">
-    <h1>📊 Dashboard de Produtividade — COP Rede</h1>
-    <p>Análise de produtividade da equipe · Upload da planilha analítica</p>
-</div>
-""", unsafe_allow_html=True)
-
-
-# =====================================================
-# UPLOAD
-# =====================================================
-with st.container():
-    col_upload1, col_upload2, col_upload3, col_upload4, col_upload5, col_info = st.columns([2, 2, 2, 2, 2, 1])
-    with col_upload1:
-        uploaded_file = st.file_uploader(
-            "📁 Planilha de Produtividade (Analítico)",
-            type=["xlsx", "xls"],
-            help="Planilha com aba 'Analítico Produtividade 2026' ou similar",
-            key="upload_prod",
-        )
-    with col_upload2:
+with st.sidebar:
+    st.markdown("### 📂 Upload de Planilhas")
+    uploaded_file = st.file_uploader(
+        "📁 Produtividade (obrigatório)",
+        type=["xlsx", "xls"],
+        help="Planilha com aba 'Analítico Produtividade 2026' ou similar",
+        key="upload_prod",
+    )
+    with st.expander("📎 Planilhas opcionais", expanded=False):
         uploaded_etit = st.file_uploader(
-            "📁 Planilha Analítico Empresarial (ETIT)",
+            "📁 ETIT por Evento",
             type=["xlsx", "xls"],
-            help="Planilha com dados ETIT POR EVENTO — opcional",
+            help="Planilha com dados ETIT POR EVENTO",
             key="upload_etit",
         )
-    with col_upload3:
         uploaded_res_ind = st.file_uploader(
-            "📁 Analítico Indicadores Residencial",
+            "📁 Indicadores Residencial",
             type=["xlsx", "xls"],
-            help="Planilha com indicadores ETIT Fibra HFC, ETIT GPON, Reprogramação GPON, Assertividade — opcional",
+            help="ETIT Fibra HFC, ETIT GPON, Reprog. GPON, Assertividade",
             key="upload_res_ind",
         )
-    with col_upload4:
         uploaded_toa = st.file_uploader(
             "📁 Indicadores TOA",
             type=["xlsx", "xls"],
-            help="Planilha Analitico_Indicadores_TOA com Tarefas Canceladas e Tempo de Validação — opcional",
+            help="Canceladas e Tempo de Validação",
             key="upload_toa",
         )
-    with col_upload5:
         uploaded_dpa = st.file_uploader(
             "📁 Ocupação DPA 2026",
             type=["xlsx", "xls"],
-            help=(
-                "Planilha Ocupação_DPA_2026 com abas 'Consolidado' e 'Analistas'.\n"
-                "Extrai automaticamente o mês mais recente com dados disponíveis. — opcional"
-            ),
+            help="Ocupação DPA com abas 'Consolidado' e 'Analistas'",
             key="upload_dpa",
         )
-    with col_info:
-        st.info(
-            f"**Equipe monitorada:** {len(EQUIPE_IDS)} analistas\n\n"
-            f"Empresarial: {len(BASE_EQUIPE[BASE_EQUIPE['Setor']=='EMPRESARIAL'])} · "
-            f"Residencial: {len(BASE_EQUIPE[BASE_EQUIPE['Setor']=='RESIDENCIAL'])}"
-        )
+    st.markdown("---")
 
 # Persistência no session_state
 for key_name, file_obj in [
@@ -447,19 +424,50 @@ for key_name, file_obj in [
         st.session_state[key_name + "_name"] = file_obj.name
 
 if "uploaded_bytes" not in st.session_state:
-    st.markdown("---")
+    st.markdown("""
+<div class="main-header">
+    <h1>📊 Dashboard de Produtividade — COP Rede</h1>
+    <p>Análise de produtividade da equipe COP Rede</p>
+</div>
+""", unsafe_allow_html=True)
+    st.markdown("")
     st.markdown("### 👋 Bem-vindo!")
     st.markdown(
-        "Faça upload da planilha **Produtividade COP Rede - Analítico** acima para "
-        "visualizar os dados de produtividade da sua equipe.\n\n"
-        "Opcionalmente, faça upload das planilhas adicionais:\n"
-        "- **Analítico Empresarial** → dados de ETIT POR EVENTO\n"
-        "- **Analítico Indicadores Residencial** → ETIT Fibra HFC, GPON, Reprog., Assertividade\n"
-        "- **Ocupação DPA 2026** → DPA oficial por analista (mês mais recente detectado automaticamente)"
+        "Faça upload da planilha **Produtividade COP Rede - Analítico** "
+        "na barra lateral para começar."
     )
+    st.markdown("")
+    col_w1, col_w2 = st.columns(2)
+    with col_w1:
+        st.markdown("""
+**Planilha obrigatória:**
+- 📁 Produtividade COP Rede — Analítico
+
+**Planilhas opcionais:**
+- 📁 ETIT por Evento (Empresarial)
+- 📁 Indicadores Residencial
+- 📁 Indicadores TOA
+- 📁 Ocupação DPA 2026
+        """)
+    with col_w2:
+        st.info(
+            f"**Equipe monitorada:** {len(EQUIPE_IDS)} analistas\n\n"
+            f"Empresarial: {len(BASE_EQUIPE[BASE_EQUIPE['Setor']=='EMPRESARIAL'])} · "
+            f"Residencial: {len(BASE_EQUIPE[BASE_EQUIPE['Setor']=='RESIDENCIAL'])}"
+        )
     with st.expander("📋 Analistas monitorados"):
         st.dataframe(BASE_EQUIPE, use_container_width=True, hide_index=True)
     st.stop()
+
+# =====================================================
+# HEADER (após upload)
+# =====================================================
+st.markdown("""
+<div class="main-header">
+    <h1>📊 Dashboard de Produtividade — COP Rede</h1>
+    <p>Análise de produtividade da equipe COP Rede</p>
+</div>
+""", unsafe_allow_html=True)
 
 
 # =====================================================
@@ -486,9 +494,9 @@ def _cached_load_dpa(_file_hash, raw_bytes):
 @st.cache_data(show_spinner="Processando Indicadores TOA...")
 def _cached_load_toa(_file_hash, raw_bytes):
     df = load_toa_indicadores(io.BytesIO(raw_bytes))
-    # Converter colunas Timedelta para evitar problemas de serialização
+    # Converter Timedelta restantes para minutos (evitar problemas de serialização)
     for col in df.select_dtypes(include=["timedelta64"]).columns:
-        df[col] = df[col].dt.total_seconds()
+        df[col] = df[col].dt.total_seconds() / 60
     return df
 
 
@@ -834,7 +842,7 @@ if analista_selecionado != "Todos":
                 etit_total = etit_ind[ETIT_COL_VOLUME].sum()
                 etit_ader = etit_ind[ETIT_COL_INDICADOR_VAL].sum()
                 etit_pct = (etit_ader / etit_total * 100) if etit_total > 0 else 0
-                etit_tma = etit_ind[ETIT_COL_TMA].mean()
+                etit_tma = etit_ind[ETIT_COL_TMA].mean() * 1440  # dias → min
                 with ei1:
                     st.markdown(kpi_card("Eventos ETIT", f"{etit_total:,.0f}", "#8E44AD"), unsafe_allow_html=True)
                 with ei2:
@@ -843,7 +851,7 @@ if analista_selecionado != "Todos":
                     ad_color = COR_SUCESSO if etit_pct >= 90 else (COR_ALERTA if etit_pct >= 70 else COR_PERIGO)
                     st.markdown(kpi_card("Aderência", f"{etit_pct:.1f}", ad_color, suffix="%"), unsafe_allow_html=True)
                 with ei4:
-                    st.markdown(kpi_card("TMA Médio", f"{etit_tma:.4f}", COR_INFO), unsafe_allow_html=True)
+                    st.markdown(kpi_card("TMA Médio (min)", f"{etit_tma:.1f}", COR_INFO), unsafe_allow_html=True)
             else:
                 st.caption("Nenhum evento ETIT encontrado para este analista no período.")
 
@@ -1253,8 +1261,8 @@ if etit_loaded and _tab_etit_idx is not None:
                 _dem_vol = _dem_df[ETIT_COL_VOLUME].sum()
                 _dem_ader = _dem_df[ETIT_COL_INDICADOR_VAL].sum()
                 _dem_pct = (_dem_ader / _dem_vol * 100) if _dem_vol > 0 else 0
-                _dem_tma = _dem_df[ETIT_COL_TMA].mean()
-                _dem_tmr = _dem_df[ETIT_COL_TMR].mean()
+                _dem_tma = _dem_df[ETIT_COL_TMA].mean() * 1440  # dias → min
+                _dem_tmr = _dem_df[ETIT_COL_TMR].mean() * 1440
                 _dem_n = _dem_df[ETIT_COL_LOGIN].nunique()
                 _meta_ok = _dem_pct >= _META_ETIT
                 _meta_icon = "✅" if _meta_ok else "❌"
@@ -1269,7 +1277,7 @@ if etit_loaded and _tab_etit_idx is not None:
                 with dk3:
                     st.markdown(kpi_card("Aderência", f"{_dem_pct:.1f}", _meta_color, suffix="%"), unsafe_allow_html=True)
                 with dk4:
-                    st.markdown(kpi_card("TMA Médio", f"{_dem_tma:.4f}", COR_PRIMARIA), unsafe_allow_html=True)
+                    st.markdown(kpi_card("TMA Médio (min)", f"{_dem_tma:.1f}", COR_PRIMARIA), unsafe_allow_html=True)
                 with dk5:
                     st.markdown(kpi_card("Analistas", f"{_dem_n}", COR_INFO), unsafe_allow_html=True)
 
@@ -1282,16 +1290,17 @@ if etit_loaded and _tab_etit_idx is not None:
                 ).reset_index()
                 _dem_rank["Aderência %"] = (_dem_rank["Aderentes"] / _dem_rank["Eventos"] * 100).round(1)
                 _dem_rank["Nome"] = _dem_rank["Nome"].apply(primeiro_nome)
-                _dem_rank["TMA"] = _dem_rank["TMA"].round(4)
-                _dem_rank["TMR"] = _dem_rank["TMR"].round(4)
+                _dem_rank["TMA"] = (_dem_rank["TMA"] * 1440).round(1)
+                _dem_rank["TMR"] = (_dem_rank["TMR"] * 1440).round(1)
                 _dem_rank = _dem_rank.sort_values("Eventos", ascending=False).reset_index(drop=True)
                 _dem_rank.index += 1; _dem_rank.index.name = "#"
 
                 col_rk, col_gr = st.columns(2)
                 with col_rk:
                     st.markdown(f"**Ranking {_dem_tipo} por Analista**")
-                    _dem_show = _dem_rank[["Nome", "Setor", "Eventos", "Aderentes", "Aderência %", "TMA", "TMR"]]
-                    _sty = _dem_show.style.format({"Aderência %": "{:.1f}", "TMA": "{:.4f}", "TMR": "{:.4f}"}, na_rep="—")
+                    _dem_show = _dem_rank[["Nome", "Setor", "Eventos", "Aderentes", "Aderência %", "TMA", "TMR"]].copy()
+                    _dem_show.columns = ["Nome", "Setor", "Eventos", "Aderentes", "Aderência %", "TMA (min)", "TMR (min)"]
+                    _sty = _dem_show.style.format({"Aderência %": "{:.1f}", "TMA (min)": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
                     _sty = _sty.background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100)
                     _sty = _sty.background_gradient(cmap="Purples", subset=["Eventos"])
                     st.dataframe(_sty, use_container_width=True)
@@ -1330,8 +1339,8 @@ if etit_loaded and _tab_etit_idx is not None:
                     TMR=(ETIT_COL_TMR, "mean"),
                 ).reset_index().rename(columns={ETIT_COL_GRUPO: "Grupo"})
                 _gg["Aderência %"] = (_gg["Aderentes"] / _gg["Eventos"] * 100).round(1)
-                _gg["TMA"] = _gg["TMA"].round(4)
-                _gg["TMR"] = _gg["TMR"].round(4)
+                _gg["TMA"] = (_gg["TMA"] * 1440).round(1)
+                _gg["TMR"] = (_gg["TMR"] * 1440).round(1)
                 _gg = _gg.sort_values("Eventos", ascending=False).reset_index(drop=True)
                 if not _gg.empty:
                     _bg = _gg.loc[_gg["Aderência %"].idxmax()]
@@ -1340,7 +1349,8 @@ if etit_loaded and _tab_etit_idx is not None:
                         f"🟢 Melhor grupo: **{_bg['Grupo']}** ({_bg['Aderência %']:.1f}%) · "
                         f"🔴 Pior grupo: **{_wg['Grupo']}** ({_wg['Aderência %']:.1f}%)"
                     )
-                    _sgg = _gg.style.format({"Aderência %": "{:.1f}", "TMA": "{:.4f}", "TMR": "{:.4f}"}, na_rep="—")
+                    _gg = _gg.rename(columns={"TMA": "TMA (min)", "TMR": "TMR (min)"})
+                    _sgg = _gg.style.format({"Aderência %": "{:.1f}", "TMA (min)": "{:.1f}", "TMR (min)": "{:.1f}"}, na_rep="—")
                     _sgg = _sgg.background_gradient(cmap="RdYlGn", subset=["Aderência %"], vmin=50, vmax=100)
                     st.dataframe(_sgg, use_container_width=True, hide_index=True)
                 st.markdown("---")
@@ -1430,8 +1440,8 @@ if res_ind_loaded and _tab_res_idx is not None:
                 label = RES_IND_LABELS.get(ind_name, ind_name)
                 color = RES_IND_COLORS.get(ind_name, "#5DADE2")
                 vol = int(row["Volume"]); ader = int(row["Aderentes"]); pct = row["Aderencia_Pct"]
-                tma_str = f"TMA: {row['TMA_Medio']:.4f}" if "TMA_Medio" in row and pd.notna(row.get("TMA_Medio")) else ""
-                tmr_str = f"TMR: {row['TMR_Medio']:.4f}" if "TMR_Medio" in row and pd.notna(row.get("TMR_Medio")) else ""
+                tma_str = f"TMA: {row['TMA_Medio']:.1f} min" if "TMA_Medio" in row and pd.notna(row.get("TMA_Medio")) else ""
+                tmr_str = f"TMR: {row['TMR_Medio']:.1f} min" if "TMR_Medio" in row and pd.notna(row.get("TMR_Medio")) else ""
                 extra = " · ".join(filter(None, [tma_str, tmr_str]))
                 pct_color = COR_SUCESSO if pct >= 90 else (COR_ALERTA if pct >= 70 else COR_PERIGO)
                 with ind_cols[i]:
@@ -1525,10 +1535,10 @@ if res_ind_loaded and _tab_res_idx is not None:
                         st.markdown(kpi_card("Aderência", f"{pct_total:.1f}", pct_c, suffix="%"), unsafe_allow_html=True)
                     with sk4:
                         if RES_TMA in sub.columns:
-                            st.markdown(kpi_card("TMA Médio", f"{sub[RES_TMA].mean():.4f}", COR_INFO), unsafe_allow_html=True)
+                            st.markdown(kpi_card("TMA Médio (min)", f"{sub[RES_TMA].mean() * 1440:.1f}", COR_INFO), unsafe_allow_html=True)
                     with sk5:
                         if RES_TMR in sub.columns:
-                            st.markdown(kpi_card("TMR Médio", f"{sub[RES_TMR].mean():.4f}", COR_ALERTA), unsafe_allow_html=True)
+                            st.markdown(kpi_card("TMR Médio (min)", f"{sub[RES_TMR].mean() * 1440:.1f}", COR_ALERTA), unsafe_allow_html=True)
 
                     cn, cs = st.columns(2)
                     with cn:
