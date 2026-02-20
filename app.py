@@ -1,5 +1,6 @@
 import traceback
 import io
+import hashlib
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -462,31 +463,45 @@ if "uploaded_bytes" not in st.session_state:
 
 
 # =====================================================
-# HELPER — cache por hash do arquivo no session_state
+# FUNÇÕES CACHEADAS — só reprocessa quando o arquivo muda
 # =====================================================
-import hashlib
+@st.cache_data(show_spinner="Processando Produtividade...")
+def _cached_load_prod(_file_hash, raw_bytes):
+    return load_produtividade(io.BytesIO(raw_bytes))
 
-def _file_hash(raw_bytes: bytes) -> str:
+@st.cache_data(show_spinner="Processando ETIT...")
+def _cached_load_etit(_file_hash, raw_bytes):
+    return load_etit(io.BytesIO(raw_bytes))
+
+@st.cache_data(show_spinner="Processando Indicadores Residencial...")
+def _cached_load_res(_file_hash, raw_bytes):
+    return load_residencial_indicadores(io.BytesIO(raw_bytes))
+
+@st.cache_data(show_spinner="Processando Ocupação DPA...")
+def _cached_load_dpa(_file_hash, raw_bytes):
+    df, info = load_dpa_ocupacao(io.BytesIO(raw_bytes))
+    # Converter info para ser serializável pelo cache
+    return df, dict(info) if info else {}
+
+@st.cache_data(show_spinner="Processando Indicadores TOA...")
+def _cached_load_toa(_file_hash, raw_bytes):
+    df = load_toa_indicadores(io.BytesIO(raw_bytes))
+    # Converter colunas Timedelta para evitar problemas de serialização
+    for col in df.select_dtypes(include=["timedelta64"]).columns:
+        df[col] = df[col].dt.total_seconds()
+    return df
+
+
+def _get_hash(raw_bytes):
     return hashlib.md5(raw_bytes).hexdigest()
-
-def _load_cached(cache_key, hash_key, raw_bytes, loader_fn, label=""):
-    """Carrega dados usando cache no session_state. Só reprocessa se o arquivo mudou."""
-    current_hash = _file_hash(raw_bytes)
-    if hash_key in st.session_state and st.session_state[hash_key] == current_hash and cache_key in st.session_state:
-        return st.session_state[cache_key]
-    with st.spinner(f"Processando {label}..."):
-        result = loader_fn(io.BytesIO(raw_bytes))
-    st.session_state[cache_key] = result
-    st.session_state[hash_key] = current_hash
-    return result
 
 
 # =====================================================
 # PROCESSAR DADOS — Produtividade
 # =====================================================
 try:
-    df = _load_cached("_df_prod", "_hash_prod", st.session_state["uploaded_bytes"],
-                      load_produtividade, "Produtividade")
+    _h = _get_hash(st.session_state["uploaded_bytes"])
+    df = _cached_load_prod(_h, st.session_state["uploaded_bytes"])
     if df.empty:
         st.error("Nenhum analista da equipe encontrado na planilha de produtividade.")
         st.stop()
@@ -505,8 +520,8 @@ etit_loaded = False
 
 if "uploaded_etit_bytes" in st.session_state:
     try:
-        df_etit = _load_cached("_df_etit", "_hash_etit", st.session_state["uploaded_etit_bytes"],
-                               load_etit, "ETIT POR EVENTO")
+        _h = _get_hash(st.session_state["uploaded_etit_bytes"])
+        df_etit = _cached_load_etit(_h, st.session_state["uploaded_etit_bytes"])
         etit_loaded = not df_etit.empty
         if not etit_loaded:
             st.warning("⚠️ ETIT: Planilha carregada mas nenhum analista da equipe encontrado.")
@@ -524,8 +539,8 @@ res_ind_loaded = False
 
 if "uploaded_res_ind_bytes" in st.session_state:
     try:
-        df_res_ind = _load_cached("_df_res", "_hash_res", st.session_state["uploaded_res_ind_bytes"],
-                                  load_residencial_indicadores, "Indicadores Residencial")
+        _h = _get_hash(st.session_state["uploaded_res_ind_bytes"])
+        df_res_ind = _cached_load_res(_h, st.session_state["uploaded_res_ind_bytes"])
         res_ind_loaded = not df_res_ind.empty
         if not res_ind_loaded:
             st.warning("⚠️ Residencial: Planilha carregada mas nenhum indicador encontrado.")
@@ -544,12 +559,8 @@ dpa_loaded = False
 
 if "uploaded_dpa_bytes" in st.session_state:
     try:
-        _dpa_result = _load_cached("_df_dpa_tuple", "_hash_dpa", st.session_state["uploaded_dpa_bytes"],
-                                   load_dpa_ocupacao, "Ocupação DPA")
-        if isinstance(_dpa_result, tuple):
-            df_dpa, dpa_mes_info = _dpa_result
-        else:
-            df_dpa = _dpa_result
+        _h = _get_hash(st.session_state["uploaded_dpa_bytes"])
+        df_dpa, dpa_mes_info = _cached_load_dpa(_h, st.session_state["uploaded_dpa_bytes"])
         dpa_loaded = not df_dpa.empty
         if not dpa_loaded:
             st.warning("⚠️ DPA: Planilha carregada mas nenhum analista da equipe encontrado.")
@@ -568,8 +579,8 @@ toa_anomes = None
 
 if "uploaded_toa_bytes" in st.session_state:
     try:
-        df_toa = _load_cached("_df_toa", "_hash_toa", st.session_state["uploaded_toa_bytes"],
-                              load_toa_indicadores, "Indicadores TOA")
+        _h = _get_hash(st.session_state["uploaded_toa_bytes"])
+        df_toa = _cached_load_toa(_h, st.session_state["uploaded_toa_bytes"])
         toa_loaded = not df_toa.empty
         if toa_loaded and "ANOMES" in df_toa.columns:
             toa_anomes = int(df_toa["ANOMES"].max())
