@@ -1204,6 +1204,7 @@ if etit_loaded and _tab_etit_idx is not None:
             st.warning("Nenhum dado ETIT POR EVENTO encontrado com os filtros atuais.")
         else:
             # ---- Seção RAL e REC separadas ----
+            _etit_eq = df_etit_filtrado[~df_etit_filtrado[ETIT_COL_LOGIN].isin(LIDERES_IDS)].copy()
             _META_ETIT = 90.0
             for _dem_tipo in ["RAL", "REC"]:
                 _dem_df = _etit_eq[_etit_eq[ETIT_COL_DEMANDA] == _dem_tipo]
