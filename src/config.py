@@ -286,6 +286,33 @@ TOA_AGING_ORDER = [
 ]
 
 # =====================================================
+# FECHAMENTO TOA x SIR — Planilha Fechamento_TOA_x_SIR
+# =====================================================
+# Dados extraídos do pivot cache interno (não das abas visíveis)
+
+FECH_SIR_TURNO_MADRUGADA = "Madrugada"
+
+FECH_SIR_COL_LOGIN      = "LOGIN_VALIDOU_FECHAMENTO"
+FECH_SIR_COL_TURNO      = "TURNO"
+FECH_SIR_COL_ANOMES     = "ANOMES"
+FECH_SIR_COL_VOLUME     = "VOLUME"
+FECH_SIR_COL_ASSERTIVO  = "FECHAMENTO_ASSERTIVO"
+FECH_SIR_COL_NAO_ASSER  = "FECHAMENTO_NAO_ASSERTIVO"
+FECH_SIR_COL_CAUSA_TOA  = "CAUSA_TOA"
+FECH_SIR_COL_CAUSA_SIR  = "CAUSA_SIR"
+FECH_SIR_COL_CAUSA_TRAT = "CAUSA_TOA_TRATADO"
+FECH_SIR_COL_REGIONAL   = "IN_REGIONAL"
+FECH_SIR_COL_GRUPO      = "IN_GRUPO"
+FECH_SIR_COL_DEMANDA    = "DEMANDA"
+FECH_SIR_COL_AREA       = "AREA"
+FECH_SIR_COL_AREA_ENV   = "AREA_ENVOLVIDA"
+FECH_SIR_COL_DIA        = "DIA"
+FECH_SIR_COL_MES        = "MES"
+FECH_SIR_COL_STATUS     = "STATUS"
+
+FECH_SIR_COR = "#8E44AD"   # roxo — assertividade TOA x SIR
+
+# =====================================================
 # CORES DO DASHBOARD
 # =====================================================
 COR_PRIMARIA = "#1B4F72"
